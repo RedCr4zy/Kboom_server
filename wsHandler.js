@@ -131,6 +131,7 @@ export function initWebsocket(server) {
                 }
 
                 case 'create_room': {
+                    console.log('Création de room demandée par le joueur avec le token:', token);
                     const { token, pseudo } = payload;
 
                     // ✅ VALIDATION
