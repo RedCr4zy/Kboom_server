@@ -105,6 +105,7 @@ export function startGame(roomCode) {
     });
 
     console.log(`🎮 Partie démarrée dans la room ${roomCode}`);
+    console.log(`🎲 Lettre choisie : ${letter}`);
 }
 
 /**
