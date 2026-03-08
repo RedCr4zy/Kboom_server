@@ -87,6 +87,8 @@ export function startGame(roomCode) {
     const room = rooms[roomCode];
     if (!room) return;
 
+    const letter = chooseRandomLetter();
+
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
 
     room.players.forEach(player => {
@@ -94,6 +96,7 @@ export function startGame(roomCode) {
             player.ws.send(JSON.stringify({
                 type: 'gameStarted',
                 roomCode: roomCode,
+                letter: letter,
                 message: 'La partie a commencé'
             }));
         } catch(e) {

@@ -222,10 +222,6 @@ export function initWebsocket(server) {
                         gameManager.startGame(roomCode);
                     }
                 }
-
-                case 'test': {
-                    gameManager.chooseRandomLetter();
-                }
             }
         });
 
