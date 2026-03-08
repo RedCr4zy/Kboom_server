@@ -146,5 +146,5 @@ export function chooseRandomLetter() {
     const choosenLetter = arrayRandom(possibleLetters);
     console.log(choosenLetter);
 
-    return;
+    return choosenLetter;
 }
