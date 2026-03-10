@@ -90,14 +90,20 @@ export function startGame(roomCode) {
     const letter = chooseRandomLetter();
 
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
+    const playerList = room.players.map(p => ({
+        pseudo: p.pseudo,
+        isCurrent: p.isMaster || false
+    }));
 
     room.players.forEach(player => {
         try {
             player.ws.send(JSON.stringify({
                 type: 'gameStarted',
+                pseudo: pseudo,
                 roomCode: roomCode,
                 letter: letter,
-                message: 'La partie a commencé'
+                message: 'La partie a commencé',
+                current: isCurrent
             }));
         } catch(e) {
             console.error('Erreur startGame pour', player.pseudo, e.message);
