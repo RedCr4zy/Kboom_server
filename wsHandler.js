@@ -1,42 +1,51 @@
-import WebSocket, { WebSocketServer } from 'ws';
-import { v4 as uuidv4 } from 'uuid';
+import WebSocket, {WebSocketServer} from 'ws';
+import {v4 as uuidv4} from 'uuid';
 
-import { players, rooms } from './rooms.js';
-import * as gameManager from './gameManager.js';
+import {players, rooms} from './rooms.js'
+import * as gameManager from './gameManager.js'
 
 let wss = null;
 let heartbeatInterval = null;
 
 function startHeartbeat() {
     const INTERVAL_MS = 30000;
+    const TIMEOUT_MS = 5000;
+
     if (heartbeatInterval) clearInterval(heartbeatInterval);
+
     heartbeatInterval = setInterval(() => {
         if (!wss) return;
-        wss.clients.forEach(ws => {
-            if (ws.isAlive === false) {
-                console.log('💀 Terminaison socket mort');
 
-                // Nettoyer le joueur
-                if (ws.playerToken && players[ws.playerToken]) {
+        wss.clients.forEach(ws => { // ✅ CORRECTION : client → clients
+            if (ws.isAlive === false) {
+                console.log('💀 Terminating dead socket');
+
+                //Clear le joueur
+                if(ws.playerToken && players[playerToken]) {
                     const roomCode = players[ws.playerToken].currentRoom;
                     delete players[ws.playerToken];
 
                     if (roomCode && rooms[roomCode]) {
-                        gameManager.updateRoomPlayers(roomCode);
+                        updateRoomPlayers(roomCode);
                     }
                 }
 
-                try { ws.terminate(); } catch (e) { }
+                try {ws.terminate();} catch (e) {}
                 return;
             }
+
             ws.isAlive = false;
-            try { ws.ping(); } catch (e) { }
+            try {
+                ws.ping();
+            } catch (e) {
+                console.error('Erreur ping : ', e.message);
+            }
         });
     }, INTERVAL_MS);
 }
 
 export function initWebsocket(server) {
-    wss = new WebSocketServer({ server });
+    wss = new WebSocketServer({server});
 
     wss.on('connection', (ws) => {
         console.log('✅ Nouvelle connexion WebSocket');
@@ -50,7 +59,7 @@ export function initWebsocket(server) {
             const raw = msg.toString();
 
             let data;
-            try {
+            try{
                 data = JSON.parse(raw);
             } catch (err) {
                 console.log('Message non-JSON reçu (texte brut):', raw);
@@ -74,13 +83,13 @@ export function initWebsocket(server) {
                 }
             }
 
-            console.log('📨 Nouveau message reçu:', payload);
+            console.log('Nouveau message reçu : ', payload);
 
             const effectiveType = payload.type || data.type;
             if (!effectiveType || typeof effectiveType !== 'string') {
                 ws.send(JSON.stringify({
                     type: 'erreur',
-                    message: 'Payload JSON invalide (il manque le type).'
+                    message:'Payload JSON invalide (il manque le type).'
                 }));
                 return;
             }
@@ -89,6 +98,7 @@ export function initWebsocket(server) {
                 case 'connection': {
                     const token = payload.token;
 
+                    // ✅ VALIDATION
                     if (!token || typeof token !== 'string') {
                         ws.send(JSON.stringify({
                             type: 'erreur',
@@ -97,29 +107,33 @@ export function initWebsocket(server) {
                         return;
                     }
 
+                    // ✅ AJOUT : Stocker le token sur la websocket pour le heartbeat
                     ws.playerToken = token;
+
                     players[token] = {
                         ws,
                         pseudo: null,
                         currentRoom: null,
-                        isMaster: false,
+                        connectedAt: Date.now()
                     };
 
                     console.log('✅ Nouveau joueur avec le token:', token);
 
-                    // Confirmation de connexion
+                    // ✅ AJOUT : Envoyer une confirmation de connexion au client
+                    // Sans ça, le client attend 5 secondes et timeout !
                     ws.send(JSON.stringify({
                         type: 'connectionConfirmed',
-                        message: 'Connexion établie'
+                        token: token,
+                        message: 'Connexion établie avec succès'
                     }));
 
                     return;
                 }
 
                 case 'create_room': {
-                    const token = payload.token;
-                    const pseudo = payload.pseudo;
+                    const { token, pseudo } = payload;
 
+                    // ✅ VALIDATION
                     if (!token || !pseudo) {
                         ws.send(JSON.stringify({
                             type: 'erreur',
@@ -136,160 +150,84 @@ export function initWebsocket(server) {
                         return;
                     }
 
+                    console.log('Création de room demandée par le joueur avec le token:', token);
+
                     players[token].pseudo = pseudo;
                     gameManager.createGame(token);
-                    console.log(`🎮 Room créée par ${pseudo}`);
-
                     return;
                 }
+
 
                 case 'join_room': {
                     const token = payload.token;
                     const pseudo = payload.pseudo;
                     const roomCode = payload.roomCode;
-
-                    if (!token || !pseudo || !roomCode) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Token, pseudo et roomCode requis'
-                        }));
-                        return;
+                    if (players[token]) {
+                        players[token].pseudo = pseudo;
+                        console.log(players[token]);
                     }
-
-                    if (!players[token]) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Joueur non trouvé'
-                        }));
-                        return;
-                    }
-
-                    if (!rooms[roomCode]) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: `La room ${roomCode} n'existe pas`
-                        }));
-                        return;
-                    }
-
-                    players[token].pseudo = pseudo;
-                    const success = gameManager.addPlayerToRoom(roomCode, token, false);
-
-                    if (success) {
-                        ws.send(JSON.stringify({
+                    try {
+                        players[token].ws.send(JSON.stringify({
                             type: 'roomJoined',
                             roomCode: roomCode,
-                            message: `Vous avez rejoint la room ${roomCode}`
+                            message: 'Bienvenue ' + pseudo
                         }));
-                        console.log(`✅ ${pseudo} a rejoint la room ${roomCode}`);
+                    } catch (e) {}
+                    gameManager.addPlayerToRoom(roomCode, token, false); // ✅ AJOUT : false pour isMaster
+                    return;
+                }
+
+
+                case 'leave_room': {
+                    const token = payload.token
+                    const roomCode = payload.roomCode
+
+                    if(!players[token]) {
+                        ws.send(JSON.stringify({
+                            type: 'erreur',
+                            message: 'Joueur non trouvé',
+                        }));
+                        return;
                     }
+
+                    if (rooms[roomCode]) {
+                        //Retirer le joueur de la room
+                        rooms[roomCode].players = rooms[roomCode].players.filter(
+                            p => p !== players[token]
+                        );
+
+                        players[token].currentRoom = null;
+
+                        //Notifier les autres
+                        gameManager.updateRoomPlayers(roomCode);
+
+                        //Si la room est vide, la supprimer
+                        if (rooms[roomCode].players.length === 0) {
+                            delete rooms[roomCode];
+                            console.log(`Room ${roomCode} supprimée (vide)`)
+                        }
+                    }
+
+                    players[token].ws.send(JSON.stringify({
+                        type: 'left_room',
+                        roomCode: roomCode,
+                        message: 'Vous avez bien quitté la room',
+                    }));
 
                     return;
                 }
 
                 case 'start_game': {
                     const roomCode = payload.roomCode;
-
-                    if (!roomCode || !rooms[roomCode]) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Room introuvable'
-                        }));
-                        return;
+                    if (roomCode && roomCode != null) {
+                        console.log('La partie :', roomCode, 'vient de commencer');
+                        gameManager.startGame(roomCode);
                     }
-
-                    // Vérifier que c'est bien le master qui démarre
-                    const token = ws.playerToken;
-                    if (!players[token] || !players[token].isMaster) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Seul le maître peut démarrer la partie'
-                        }));
-                        return;
-                    }
-
-                    gameManager.startGame(roomCode);
-                    console.log(`🎮 Partie démarrée dans ${roomCode}`);
-
-                    return;
                 }
-
-                case 'submit_words': {
-                    const { roomCode, token, words, round } = payload;
-
-                    if (!roomCode || !token || !words || !round) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Données incomplètes'
-                        }));
-                        return;
-                    }
-
-                    gameManager.submitWords(roomCode, token, words, round);
-                    console.log(`📝 ${players[token]?.pseudo} a soumis ses mots`);
-
-                    return;
-                }
-
-                case 'restart_game': {
-                    const roomCode = payload.roomCode;
-
-                    if (!roomCode || !rooms[roomCode]) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Room introuvable'
-                        }));
-                        return;
-                    }
-
-                    // Vérifier que c'est bien le master
-                    const token = ws.playerToken;
-                    if (!players[token] || !players[token].isMaster) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Seul le maître peut relancer la partie'
-                        }));
-                        return;
-                    }
-
-                    gameManager.restartGame(roomCode);
-                    console.log(`🔄 Partie relancée dans ${roomCode}`);
-
-                    return;
-                }
-
-                case 'leave_room': {
-                    const { token, roomCode } = payload;
-
-                    if (!players[token]) {
-                        ws.send(JSON.stringify({
-                            type: 'erreur',
-                            message: 'Joueur non trouvé'
-                        }));
-                        return;
-                    }
-
-                    gameManager.leaveRoom(roomCode, token);
-
-                    ws.send(JSON.stringify({
-                        type: 'left_room',
-                        roomCode: roomCode,
-                        message: 'Vous avez quitté la salle'
-                    }));
-
-                    return;
-                }
-
-                default:
-                    console.log('⚠️ Type de message non géré:', effectiveType);
-                    ws.send(JSON.stringify({
-                        type: 'erreur',
-                        message: `Type de message non reconnu: ${effectiveType}`
-                    }));
             }
         });
 
-        // Gestionnaire d'erreur
+        // ✅ AJOUT : Gestionnaire d'erreur
         ws.on('error', (error) => {
             console.error('❌ Erreur WebSocket:', error.message);
             if (ws.playerToken && players[ws.playerToken]) {
@@ -302,24 +240,20 @@ export function initWebsocket(server) {
             }
         });
 
-        // Gestionnaire de fermeture
+        // ✅ AJOUT : Gestionnaire de fermeture
         ws.on('close', () => {
             console.log('🔌 Connexion fermée');
             if (ws.playerToken && players[ws.playerToken]) {
                 const roomCode = players[ws.playerToken].currentRoom;
-                const pseudo = players[ws.playerToken].pseudo;
+                delete players[ws.playerToken];
 
                 if (roomCode && rooms[roomCode]) {
-                    gameManager.leaveRoom(roomCode, ws.playerToken);
+                    gameManager.updateRoomPlayers(roomCode);
                 }
-
-                delete players[ws.playerToken];
-                console.log(`👋 ${pseudo} déconnecté`);
             }
         });
 
     });
 
     startHeartbeat();
-    console.log('✅ WebSocket handler initialisé');
 }
