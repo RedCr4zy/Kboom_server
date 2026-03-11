@@ -103,7 +103,6 @@ export function startGame(roomCode) {
                 roomCode: roomCode,
                 letter: letter,
                 message: 'La partie a commencé',
-                current: isCurrent
             }));
         } catch(e) {
             console.error('Erreur startGame pour', player.pseudo, e.message);
