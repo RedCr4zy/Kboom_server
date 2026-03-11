@@ -90,9 +90,6 @@ export function startGame(roomCode) {
     const letter = chooseRandomLetter();
 
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
-    const List = room.players.map(p => ({
-        isCurrent: p.isMaster || false
-    }));
 
     room.players.forEach(player => {
         try {
