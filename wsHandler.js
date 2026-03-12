@@ -224,6 +224,15 @@ export function initWebsocket(server) {
                         gameManager.startGame(roomCode);
                     }
                 }
+
+                case 'next_player': {
+                    const roomCode = payload.roomCode;
+                    if (roomCode && roomCode != null) {
+                        console.log('Passage au joueur suivant dans la partie :', roomCode);
+                        gameManager.nextRound(roomCode);
+                    }
+                    return;
+                }
             }
         });
 
