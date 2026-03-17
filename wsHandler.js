@@ -233,6 +233,17 @@ export function initWebsocket(server) {
                     }
                     return;
                 }
+
+                case 'validate_answer': {
+                    const roomCode = payload.roomCode;
+                    if (roomCode && roomCode != null) {
+                        console.log('Validation de la réponse dans la partie :', roomCode);
+                        gameManager.validateAnswer(roomCode);
+
+                        gameManager.validateAnswer(roomCode);
+                    }
+                    return;
+                }
             }
         });
 

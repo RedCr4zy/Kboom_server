@@ -149,6 +149,30 @@ export function startGame(roomCode) {
     });
 }
 
+export function validateAnswer(roomCode) {
+    const room = rooms[roomCode];
+
+    if (!room || !room.gameState.isStarted) {
+        console.log('❌ Room inexistante ou partie non démarrée');
+        return;
+    }
+    console.log(`✅ Réponse validée pour la room ${roomCode}`);
+
+    // Notifier tous les joueurs
+    room.players.forEach(player => {
+        try {
+            player.ws.send(JSON.stringify({
+                type: 'answerValidated',
+                roomCode: roomCode,
+                message: 'La réponse a été validée'
+            }));
+        } catch(e) {
+            console.error('Erreur validateAnswer pour', player.pseudo, e.message);
+        }
+    });
+}
+
+
 /**
  * ✅ NOUVELLE FONCTION : Passer au tour suivant
  * @param {string} roomCode - Code de la room
