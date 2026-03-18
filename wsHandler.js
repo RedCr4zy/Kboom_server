@@ -235,14 +235,25 @@ export function initWebsocket(server) {
                 }
 
                 case 'validate_answer': {
+                    console.log('Validation de la réponse reçue :', payload);
                     const roomCode = payload.roomCode;
                     if (roomCode && roomCode != null) {
                         console.log('Validation de la réponse dans la partie :', roomCode);
                         gameManager.validateAnswer(roomCode);
-
-                        gameManager.validateAnswer(roomCode);
                     }
                     return;
+                }
+
+                case 'answer': {
+                    console.log('Réponse reçue :', payload);
+                    const roomCode = payload.roomCode;
+                    const token = payload.token;
+                    const answer = payload.isAnswerOK;
+
+                    if (roomCode && roomCode != null) {
+                        console.log('Réponse reçue pour la partie :', roomCode, 'avec la réponse :', answer);
+                        gameManager.receiveAnswer(roomCode, token, answer);
+                    }
                 }
             }
         });

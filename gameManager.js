@@ -172,6 +172,21 @@ export function validateAnswer(roomCode) {
     });
 }
 
+export function receiveAnswer(roomCode, playerToken, answer) {
+    const room = rooms[roomCode];
+    if (!room || !room.gameState.isStarted) {
+        console.log('❌ Room inexistante ou partie non démarrée');
+        return;
+    }
+
+    if (playerToken !== room.gameState.playerOrder[room.gameState.players.findIndex(p => p.token === playerToken)]) {
+        console.log(`Test`);
+        return;
+    }
+
+    print('Test 2');
+}
+
 
 /**
  * ✅ NOUVELLE FONCTION : Passer au tour suivant
