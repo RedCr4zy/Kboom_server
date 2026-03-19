@@ -251,12 +251,12 @@ export function nextTurn(roomCode) {
     
     // Si on a fait le tour de tous les joueurs, nouvelle manche
     
-    /*if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
+    if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
         room.gameState.currentRound++;
         room.gameState.currentLetter = chooseRandomLetter();
         console.log(`🔄 Nouvelle manche ${room.gameState.currentRound} - Lettre : ${room.gameState.currentLetter}`);
-    }*/
+    }
 
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
     const currentPlayer = players[currentPlayerToken];
