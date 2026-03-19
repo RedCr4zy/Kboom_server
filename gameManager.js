@@ -104,7 +104,7 @@ export function updateRoomPlayers(roomCode) {
 /**
  * Démarre la partie et notifie tous les joueurs
  */
-export function startGame(roomCode, maxRounds = 7) {
+export function startGame(roomCode, maxRounds) {
     const room = rooms[roomCode];
     if (!room) return;
 
@@ -315,7 +315,7 @@ export function endCurrentTurn(roomCode, playerToken) {
     nextRound(roomCode);
 }
 
-export function finishGame(roomeCode) {
+export function finishGame(roomCode) {
     const room = rooms[roomCode];
     if(!room || !room.gameState.isStarted) {
         console.log('❌ Room inexistante ou partie non démarrée');
