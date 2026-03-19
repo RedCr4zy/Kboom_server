@@ -130,7 +130,7 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'update' {
+                case 'update': {
                     const token = payload.token;
                     const pseudo = payload.pseudo;
                     const roomCode = payload.roomCode;
