@@ -219,9 +219,10 @@ export function initWebsocket(server) {
 
                 case 'start_game': {
                     const roomCode = payload.roomCode;
+                    const maxRounds = payload.maxRounds || 2;
                     if (roomCode && roomCode != null) {
                         console.log('La partie :', roomCode, 'vient de commencer');
-                        gameManager.startGame(roomCode);
+                        gameManager.startGame(roomCode, maxRounds);
                     }
                 }
 

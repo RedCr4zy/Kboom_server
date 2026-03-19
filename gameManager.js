@@ -18,6 +18,7 @@ function generateRoom() {
         // ✅ AJOUT : État du jeu
         gameState: {
             isStarted: false,
+            maxRounds: 10,
             currentRound: 0,
             currentPlayerIndex: 0, // Index du joueur dont c'est le tour
             currentLetter: null,
@@ -103,7 +104,7 @@ export function updateRoomPlayers(roomCode) {
 /**
  * Démarre la partie et notifie tous les joueurs
  */
-export function startGame(roomCode) {
+export function startGame(roomCode, maxRounds = 7) {
     const room = rooms[roomCode];
     if (!room) return;
 
@@ -112,6 +113,7 @@ export function startGame(roomCode) {
     room.gameState.currentRound = 1;
     room.gameState.currentPlayerIndex = 0;
     room.gameState.currentLetter = chooseRandomLetter();
+    room.gameState.maxRounds = maxRounds;
 
     // Filtrer les joueurs connectés et mettre à jour l'ordre
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
@@ -195,22 +197,6 @@ export function validateOrNot(roomCode, playerToken, answer) {
 
     if (totalVotes === totalPlayers) {
         // Calculer le score des joueurs
-        /*const scores = room.gameState.playerOrder.map(t => {
-            const votes = room.gameState.currentVote.votes;
-            let vote_pour = 0;
-            let vote_contre = 0;
-
-            Object.values(votes).forEach(vote => {
-                if (vote === true) {
-                    vote_pour++;
-                } else {
-                    vote_contre++;
-                }
-            });
-
-            const pourcentage = (vote_pour / totalVotes) * 100;
-        )*/
-
         let vote_pour = 0;
         let vote_contre = 0;
 
@@ -257,6 +243,7 @@ export function nextTurn(roomCode) {
     if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
         room.gameState.currentRound++;
+        room.gameState.currentRound = room.gameState.currentRound + 1;
         //room.gameState.currentLetter = chooseRandomLetter();
         console.log(`🔄 Nouvelle manche ${room.gameState.currentRound} - Lettre : ${room.gameState.currentLetter}`);
     }
