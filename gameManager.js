@@ -188,6 +188,50 @@ export function validateOrNot(roomCode, playerToken, answer) {
 
     // Enregistrer le vote
     room.gameState.currentVote.votes[playerToken] = answer;
+
+    // Vérifier si tous les joueurs ont voté
+    const totalPlayers = room.gameState.playerOrder.length;
+    const totalVotes = Object.keys(room.gameState.currentVote.votes).length;
+
+    if (totalVotes === totalPlayers) {
+        // Calculer le score des joueurs
+        /*const scores = room.gameState.playerOrder.map(t => {
+            const votes = room.gameState.currentVote.votes;
+            let vote_pour = 0;
+            let vote_contre = 0;
+
+            Object.values(votes).forEach(vote => {
+                if (vote === true) {
+                    vote_pour++;
+                } else {
+                    vote_contre++;
+                }
+            });
+
+            const pourcentage = (vote_pour / totalVotes) * 100;
+        )*/
+
+        let vote_pour = 0;
+        let vote_contre = 0;
+
+        Object.values(room.gameState.currentVote.votes).forEach(vote => {
+            if (vote === true) {
+                vote_pour++;
+            }
+            else {
+                vote_contre++;
+            }
+        });
+
+        const pourcentage = (voute_pour / vote_contre) * 100;
+
+        console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${pourcentage.toFixed(2)}%)`);
+
+        if (pourcentage >= 50) {
+            console.log(`✅ La réponse est validée pour la room ${roomCode}`);
+            nextTurn(roomCode);
+        }
+    }
 }
 
 
@@ -195,7 +239,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
  * ✅ NOUVELLE FONCTION : Passer au tour suivant
  * @param {string} roomCode - Code de la room
  */
-export function nextRound(roomCode) {
+export function nextTurn(roomCode) {
     const room = rooms[roomCode];
     if (!room || !room.gameState.isStarted) {
         console.log('❌ Room inexistante ou partie non démarrée');
@@ -206,12 +250,13 @@ export function nextRound(roomCode) {
     room.gameState.currentPlayerIndex++;
     
     // Si on a fait le tour de tous les joueurs, nouvelle manche
-    if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
+    
+    /*if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
         room.gameState.currentRound++;
         room.gameState.currentLetter = chooseRandomLetter();
         console.log(`🔄 Nouvelle manche ${room.gameState.currentRound} - Lettre : ${room.gameState.currentLetter}`);
-    }
+    }*/
 
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
     const currentPlayer = players[currentPlayerToken];
