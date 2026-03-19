@@ -138,9 +138,8 @@ export function initWebsocket(server) {
                     if (players[token]) {
                         players[token].pseudo = pseudo;
                         gameManager.updateRoomPlayers(roomCode);
-
-                        return;
                     }
+                    return;
                 }
 
                 case 'create_room': {
@@ -237,6 +236,7 @@ export function initWebsocket(server) {
                         console.log('La partie :', roomCode, 'vient de commencer');
                         gameManager.startGame(roomCode, maxRounds);
                     }
+                    return;
                 }
 
                 case 'next_player': {
@@ -268,6 +268,7 @@ export function initWebsocket(server) {
                         console.log('Réponse reçue pour la partie :', roomCode, 'avec la réponse :', answer);
                         gameManager.validateOrNot(roomCode, token, answer);
                     }
+                    return;
                 }
             }
         });
