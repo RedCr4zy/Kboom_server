@@ -227,8 +227,11 @@ export function validateOrNot(roomCode, playerToken, answer) {
 
         console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${pourcentage.toFixed(2)}%)`);
 
+        const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
+
         if (pourcentage >= 50) {
             console.log(`✅ La réponse est validée pour la room ${roomCode}`);
+            room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
             nextTurn(roomCode);
         }
     }
@@ -254,8 +257,14 @@ export function nextTurn(roomCode) {
     if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
         room.gameState.currentRound++;
-        room.gameState.currentLetter = chooseRandomLetter();
+        //room.gameState.currentLetter = chooseRandomLetter();
         console.log(`🔄 Nouvelle manche ${room.gameState.currentRound} - Lettre : ${room.gameState.currentLetter}`);
+    }
+
+    if (room.gameState.currentRound > room.gameState.maxRounds) {
+        console.log(`🏁 Partie terminée dans la room ${roomCode}`);
+        finishGame(roomCode);
+        return;
     }
 
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
@@ -317,6 +326,30 @@ export function endCurrentTurn(roomCode, playerToken) {
     
     // Passer au tour suivant
     nextRound(roomCode);
+}
+
+export function finishGame(roomeCode) {
+    const room = rooms[roomCode];
+    if(!room || !room.gameState.isStarted) {
+        console.log('❌ Room inexistante ou partie non démarrée');
+        return;
+    }
+
+    room.players.forEach((player, index) => {
+        const playerToken = room.gameState.playerOrder[index];
+
+        try {
+            player.ws.send(JSON.stringify({
+                type: 'finishGame',
+                roomCode: roomCode,
+                scores: room.gameState.scores,
+                yourScore: room.gameState.scores[playerToken],
+            }));
+        } catch(e) {
+            console.error('Erreur finishGame pour', player.pseudo, e.message);
+        }
+    });
+
 }
 
 /**
