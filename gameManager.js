@@ -184,12 +184,10 @@ export function validateOrNot(roomCode, playerToken, answer) {
         return;
     }
 
-    if (playerToken !== room.gameState.playerOrder[room.gameState.players.findIndex(p => p.token === playerToken)]) {
-        console.log(`Test`);
-        return;
-    }
+    console.log(`✅ Vote reçu pour la room ${roomCode} : ${players[playerToken]?.pseudo} a voté ${answer}`);
 
-    print('Test 2');
+    // Enregistrer le vote
+    room.gameState.currentVote.votes[playerToken] = answer;
 }
 
 
