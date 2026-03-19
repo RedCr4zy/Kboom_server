@@ -130,6 +130,17 @@ export function initWebsocket(server) {
                     return;
                 }
 
+                case 'update' {
+                    const token = payload.token;
+                    const pseudo = payload.pseudo;
+                    const roomCode = payload.roomCode;
+
+                    if (players[token]) {
+                        players[token].pseudo = pseudo;
+                        console.log(players[token]);
+                    }
+                }
+
                 case 'create_room': {
                     const { token, pseudo } = payload;
 
