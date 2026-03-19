@@ -243,8 +243,6 @@ export function nextTurn(roomCode) {
     if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
         room.gameState.currentRound++;
-        room.gameState.currentRound = room.gameState.currentRound + 1;
-        //room.gameState.currentLetter = chooseRandomLetter();
         console.log(`🔄 Nouvelle manche ${room.gameState.currentRound} - Lettre : ${room.gameState.currentLetter}`);
     }
 
