@@ -223,7 +223,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
             }
         });
 
-        const pourcentage = (voute_pour / vote_contre) * 100;
+        const pourcentage = (vote_pour / vote_contre) * 100;
 
         console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${pourcentage.toFixed(2)}%)`);
 
