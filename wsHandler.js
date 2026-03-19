@@ -229,7 +229,7 @@ export function initWebsocket(server) {
                     const roomCode = payload.roomCode;
                     if (roomCode && roomCode != null) {
                         console.log('Passage au joueur suivant dans la partie :', roomCode);
-                        gameManager.nextRound(roomCode);
+                        gameManager.nextTurn(roomCode);
                     }
                     return;
                 }
