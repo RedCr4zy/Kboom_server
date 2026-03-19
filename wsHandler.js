@@ -234,7 +234,7 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'validate_answer': {
+                case 'send_answer': {
                     console.log('Validation de la réponse reçue :', payload);
                     const roomCode = payload.roomCode;
                     if (roomCode && roomCode != null) {
@@ -244,7 +244,7 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'answer': {
+                case 'validate_or_not': {
                     console.log('Réponse reçue :', payload);
                     const roomCode = payload.roomCode;
                     const token = payload.token;
@@ -252,7 +252,7 @@ export function initWebsocket(server) {
 
                     if (roomCode && roomCode != null) {
                         console.log('Réponse reçue pour la partie :', roomCode, 'avec la réponse :', answer);
-                        gameManager.receiveAnswer(roomCode, token, answer);
+                        gameManager.validateOrNot(roomCode, token, answer);
                     }
                 }
             }

@@ -23,6 +23,9 @@ function generateRoom() {
             currentLetter: null,
             playerOrder: [], // Liste ordonnée des tokens des joueurs
             scores: {}, // token -> score
+            currentVote: {
+                votes: {}
+            } // token -> true/false
         }
     };
     console.log(`🔹 Room créée : ${roomCode}`);
@@ -158,6 +161,8 @@ export function validateAnswer(roomCode) {
     }
     console.log(`✅ Réponse validée pour la room ${roomCode}`);
 
+    room.gameState.currentVote.votes = {}; // Réinitialiser les votes
+
     // Notifier tous les joueurs
     room.players.forEach(player => {
         try {
@@ -172,7 +177,7 @@ export function validateAnswer(roomCode) {
     });
 }
 
-export function receiveAnswer(roomCode, playerToken, answer) {
+export function validateOrNot(roomCode, playerToken, answer) {
     const room = rooms[roomCode];
     if (!room || !room.gameState.isStarted) {
         console.log('❌ Room inexistante ou partie non démarrée');
