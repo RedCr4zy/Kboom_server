@@ -138,6 +138,7 @@ export function initWebsocket(server) {
                     if (players[token]) {
                         players[token].pseudo = pseudo;
                         console.log(players[token]);
+                        gameManager.updateRoomPlayers(roomCode);
                     }
                 }
 
