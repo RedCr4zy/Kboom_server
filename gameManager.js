@@ -1,7 +1,7 @@
 // gameManager.js
 import { players, rooms } from './rooms.js';
 
-const possibleLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'V'];
+const possibleLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'I', 'M', 'P', 'R', 'S', 'T',];
 
 function arrayRandom(a) {
   return a[Math.floor(Math.random() * a.length)];
@@ -26,7 +26,12 @@ function generateRoom() {
             scores: {}, // token -> score
             currentVote: {
                 votes: {}
-            } // token -> true/false
+            }, // token -> true/false
+            malus: {},
+            timerConfig: {
+                duration: 60000
+            },
+            playerTimers: {}
         }
     };
     console.log(`🔹 Room créée : ${roomCode}`);
@@ -53,6 +58,8 @@ export function addPlayerToRoom(roomCode, playerToken, isMaster = false) {
     // ✅ AJOUT : Ajouter le joueur à l'ordre de passage
     rooms[roomCode].gameState.playerOrder.push(playerToken);
     rooms[roomCode].gameState.scores[playerToken] = 0;
+    rooms[roomCode].gameState.playerTimers[playerToken] = {totalTimeLeft: rooms[roomCode].gameState.timerConfig.duration};
+    console.log(`⏱️ Timer initialisé pour ${player.pseudo} : ${rooms[roomCode].gameState.timerConfig.duration}ms. Temps restant : ${rooms[roomCode].gameState.playerTimers[playerToken].totalTimeLeft}ms`);
     
     console.log(`✅ Joueur ${player.pseudo} ajouté à la room ${roomCode}`);
 
@@ -209,26 +216,13 @@ export function validateOrNot(roomCode, playerToken, answer) {
             }
         });
 
-        /*const pourcentage = (vote_pour / vote_contre) * 100;
-
-        console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${pourcentage.toFixed(2)}%)`);
-
-        const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
-
-        if (pourcentage >= 50) {
-            console.log(`✅ La réponse est validée pour la room ${roomCode}`);
-            room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
-            nextTurn(roomCode);
-        }
-        else {}*/
-
         const results = vote_pour - vote_contre;
 
-        console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${results.toFixed(2)}%)`);
+        console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (Total : ${results})`);
 
         const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
-        if (results >=0) {
+        if (results > 0) {
             console.log(`✅ La réponse est validée pour la room ${roomCode}`);
             room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
             nextTurn(roomCode);
@@ -260,7 +254,6 @@ export function nextTurn(roomCode) {
     if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
         room.gameState.currentRound++;
-        console.log(`🔄 Nouvelle manche ${room.gameState.currentRound} - Lettre : ${room.gameState.currentLetter}`);
     }
 
     if (room.gameState.currentRound > room.gameState.maxRounds) {
@@ -333,32 +326,6 @@ export function replayTurn(roomCode) {
             console.error('Erreur replayTurn pour', player.pseudo, e.message);
         }
     })
-}
-
-/**
- * ✅ NOUVELLE FONCTION : Le joueur actuel termine son tour
- * @param {string} roomCode - Code de la room
- * @param {string} playerToken - Token du joueur qui termine
- */
-export function endCurrentTurn(roomCode, playerToken) {
-    const room = rooms[roomCode];
-    if (!room || !room.gameState.isStarted) {
-        console.log('❌ Room inexistante ou partie non démarrée');
-        return;
-    }
-
-    const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
-    
-    // Vérifier que c'est bien le tour du joueur
-    if (playerToken !== currentPlayerToken) {
-        console.log(`⚠️ Ce n'est pas le tour de ${players[playerToken]?.pseudo}`);
-        return;
-    }
-
-    console.log(`✅ ${players[playerToken]?.pseudo} termine son tour`);
-    
-    // Passer au tour suivant
-    nextRound(roomCode);
 }
 
 export function finishGame(roomCode) {
