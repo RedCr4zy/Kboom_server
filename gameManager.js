@@ -222,7 +222,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
         }
         else {}*/
 
-        const results = vote_pour = vote_contre;
+        const results = vote_pour - vote_contre;
 
         console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${results.toFixed(2)}%)`);
 
