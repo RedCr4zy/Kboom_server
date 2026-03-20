@@ -316,7 +316,7 @@ export function replayTurn(roomCode) {
 
     room.players = room.players.filter(p => p.ws.readyState=== p.ws.OPEN);
 
-    room.player.forEach((player, index) => {
+    room.players.forEach((player, index) => {
         const playerToken = room.gameState.playerOrder[index];
         const isCurrentPlayer = playerToken === currentPlayerToken;
 
