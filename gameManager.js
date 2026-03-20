@@ -209,7 +209,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
             }
         });
 
-        const pourcentage = (vote_pour / vote_contre) * 100;
+        /*const pourcentage = (vote_pour / vote_contre) * 100;
 
         console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${pourcentage.toFixed(2)}%)`);
 
@@ -219,6 +219,23 @@ export function validateOrNot(roomCode, playerToken, answer) {
             console.log(`✅ La réponse est validée pour la room ${roomCode}`);
             room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
             nextTurn(roomCode);
+        }
+        else {}*/
+
+        const results = vote_pour = vote_contre;
+
+        console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (${results.toFixed(2)}%)`);
+
+        const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
+
+        if (results >=0) {
+            console.log(`✅ La réponse est validée pour la room ${roomCode}`);
+            room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
+            nextTurn(roomCode);
+        }
+        else {
+            console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
+            replyTurn(roomCode);
         }
     }
 }
@@ -285,6 +302,35 @@ export function nextTurn(roomCode) {
             console.error('Erreur nextRound pour', player.pseudo, e.message);
         }
     });
+}
+
+export function replayTurn(roomCode) {
+    const room = rooms[roomCode];
+    if (!room || !room.gameState.isStarted) {
+        console.log('❌ Room inexistante ou partie non démarrée');
+        return;
+    }
+
+    const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
+    const currentPlayer = players[currentPlayerToken];
+
+    room.player.forEach((player, index) => {
+        const playerToken = room.gameState.playerOrder[index];
+        const isCurrentPlayer = playerToken === currentPlayerToken;
+
+        try {
+            player.ws.send(JSON.stringify({
+                type: 'replayTurn',
+                roomCode: roomCode,
+                isCurrentPlayer: isCurrentPlayer,
+                currentPlayerPseudo: currentPlayer?.pseudo,
+                currentPlayerToken: currentPlayerToken,
+                message: isCurrentPlayer ? "C'est encore votre tour !" : `Le tour de ${currentPlayer?.pseudo} à refaire`,
+            }))
+        } catch (e) {
+            console.error('Erreur replayTurn pour', player.pseudo, e.message);
+        }
+    })
 }
 
 /**
