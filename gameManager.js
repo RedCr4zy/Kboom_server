@@ -58,8 +58,10 @@ export function addPlayerToRoom(roomCode, playerToken, isMaster = false) {
     // ✅ AJOUT : Ajouter le joueur à l'ordre de passage
     rooms[roomCode].gameState.playerOrder.push(playerToken);
     rooms[roomCode].gameState.scores[playerToken] = 0;
-    rooms[roomCode].gameState.playerTimers[playerToken] = {totalTimeLeft: rooms[roomCode].gameState.timerConfig.duration};
-    console.log(`⏱️ Timer initialisé pour ${player.pseudo} : ${rooms[roomCode].gameState.timerConfig.duration}ms. Temps restant : ${rooms[roomCode].gameState.playerTimers[playerToken].totalTimeLeft}ms`);
+    rooms[roomCode].gameState.playerTimers[playerToken].totalTimeLeft = null;
+    rooms[roomCode].gameState.playerTimers[playerToken].turnStartTimestamp = null;
+    rooms[roomCode].gameState.playerTimers[playerToken].isPaused = true;
+    rooms[roomCode].gameState.playerTimers[playerToken].isEliminated = false;
     
     console.log(`✅ Joueur ${player.pseudo} ajouté à la room ${roomCode}`);
 
@@ -111,7 +113,7 @@ export function updateRoomPlayers(roomCode) {
 /**
  * Démarre la partie et notifie tous les joueurs
  */
-export function startGame(roomCode, maxRounds) {
+export function startGame(roomCode, maxRounds, timerDuration) {
     const room = rooms[roomCode];
     if (!room) return;
 
@@ -121,6 +123,7 @@ export function startGame(roomCode, maxRounds) {
     room.gameState.currentPlayerIndex = 0;
     room.gameState.currentLetter = chooseRandomLetter();
     room.gameState.maxRounds = maxRounds;
+    room.gameState.timerConfig.duration = timerDuration;
 
     // Filtrer les joueurs connectés et mettre à jour l'ordre
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
@@ -140,6 +143,12 @@ export function startGame(roomCode, maxRounds) {
     room.players.forEach((player, index) => {
         const playerToken = room.gameState.playerOrder[index];
         const isCurrentPlayer = playerToken === currentPlayerToken;
+        room.gameState.playerTimers[playerToken].totalTimeLeft = timerDuration;
+
+        if (isCurrentPlayer) {
+            room.gameState.playerTimers[playerToken].isPaused = false;
+            room.gameState.playerTimers[playerToken].turnStartTimestamp = Date.now();
+        }
 
         try {
             player.ws.send(JSON.stringify({
@@ -153,6 +162,16 @@ export function startGame(roomCode, maxRounds) {
                     token: t,
                     pseudo: players[t]?.pseudo
                 })),
+                maxRounds: room.gameState.maxRounds,
+                timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
+                isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
+                timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
+                allTimers: room.gameState.playerTimers.map(t => ({
+                    token: t,
+                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
+                    isPaused: room.gameState.playerTimers[t].isPaused,
+                })),
+
                 message: 'La partie a commencé',
             }));
         } catch(e) {
@@ -161,7 +180,7 @@ export function startGame(roomCode, maxRounds) {
     });
 }
 
-export function validateAnswer(roomCode) {
+export function validateAnswer(roomCode, playerToken, timeRemaining) {
     const room = rooms[roomCode];
 
     if (!room || !room.gameState.isStarted) {
@@ -169,6 +188,25 @@ export function validateAnswer(roomCode) {
         return;
     }
     console.log(`✅ Réponse validée pour la room ${roomCode}`);
+
+    const playerTimer = room.gameState.playerTimers[playerToken];
+    const marge = 2000;
+
+    tempsEcoule = Date.now() - playerTimer.turnStartTimestamp;
+    tempsRestant = playerTimer.totalTimeLeft - tempsEcoule;
+
+    difference = Math(tempsRestant - timeRemaining);
+    
+    if (difference > marge) {
+        tempsRestantFinal = tempsRestant
+    }
+    else {
+        tempsRestantFinal = (timeRemaining + tempsRestant) /2;
+    }
+
+    playerTimer.totalTimeLeft = Math(tempsRestantFinal);
+    timerPlayer.isPaused = true;
+    playerTimer.turnStartTimestamp = null;
 
     room.gameState.currentVote.votes = {}; // Réinitialiser les votes
 
@@ -178,7 +216,13 @@ export function validateAnswer(roomCode) {
             player.ws.send(JSON.stringify({
                 type: 'answerValidated',
                 roomCode: roomCode,
-                message: 'La réponse a été validée'
+                message: 'La réponse a été validée',
+                allTimers: room.gameState.playerTimers.map(t => ({
+                    token: t,
+                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
+                    isPaused: room.gameState.playerTimers[t].isPaused,
+                })),
+
             }));
         } catch(e) {
             console.error('Erreur validateAnswer pour', player.pseudo, e.message);
@@ -267,6 +311,9 @@ export function nextTurn(roomCode) {
 
     console.log(`👤 Tour de : ${currentPlayer?.pseudo}`);
 
+    room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp = Date.now();
+    room.gameState.playerTimers[currentPlayerToken].isPaused = false;
+
     // Filtrer les joueurs encore connectés
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
 
@@ -289,6 +336,14 @@ export function nextTurn(roomCode) {
                     pseudo: players[t]?.pseudo,
                     isCurrent: t === currentPlayerToken
                 })),
+                timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
+                isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
+                timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
+                allTimers: room.gameState.playerTimers.map(t => ({
+                    token: t,
+                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
+                    isPaused: room.gameState.playerTimers[t].isPaused,
+                })),
                 message: isCurrentPlayer ? "C'est votre tour !" : `C'est au tour de ${currentPlayer?.pseudo}`,
             }));
         } catch(e) {
@@ -307,6 +362,9 @@ export function replayTurn(roomCode) {
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
     const currentPlayer = players[currentPlayerToken];
 
+    room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp = Date.now();
+    room.gameState.playerTimers[currentPlayerToken].isPaused = false;
+
     room.players = room.players.filter(p => p.ws.readyState=== p.ws.OPEN);
 
     room.players.forEach((player, index) => {
@@ -320,12 +378,74 @@ export function replayTurn(roomCode) {
                 isCurrentPlayer: isCurrentPlayer,
                 currentPlayerPseudo: currentPlayer?.pseudo,
                 currentPlayerToken: currentPlayerToken,
+                playerOrder: room.gameState.playerOrder.map(t => ({
+                    token: t,
+                    pseudo: players[t]?.pseudo,
+                    isCurrent: t === currentPlayerToken
+                })),
+                timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
+                isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
+                timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
+                allTimers: room.gameState.playerTimers.map(t => ({
+                    token: t,
+                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
+                    isPaused: room.gameState.playerTimers[t].isPaused,
+                })),
                 message: isCurrentPlayer ? "C'est encore votre tour !" : `Le tour de ${currentPlayer?.pseudo} à refaire`,
             }))
         } catch (e) {
             console.error('Erreur replayTurn pour', player.pseudo, e.message);
         }
     })
+}
+
+export function elimiatePlayer(roomCode, playerToken, reason) {
+    if (!rooms[roomCode] && !rooms[roomCode].gameState.isStarted) {
+        console.log('❌ Room inexistante ou partie non démarrée');
+        return;
+    }
+
+    const room = rooms[roomCode];
+    const player = players[playerToken];
+
+    playerTimers[playerToken].isEliminated = true;
+    playerTimers[playerToken].totalTimeLeft = 0;
+    playerTimers[playerToken].isPaused = true;
+
+    if (playerToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex]) {
+        wasCurrentPlayer = true;
+    }
+
+    room.gameState.playerList = room.gameState.playerOrder.filter(t => t !== playerToken);
+    console.log(`👤 ${player?.pseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
+
+    if (currentPlayerIndex >= playerOrder.length) {
+        room.gameState.currentPlayerIndex = 0;
+    }
+    if (playerOrder.length === 1) {
+        console.log(`🏁 Partie terminée dans la room ${roomCode} (Tous les joueurs éliminés)`);
+        finishGame(roomCode);
+        return;
+    }
+
+    try {
+        player.ws.send(JSON.stringify({
+            type: 'eliminatedPlayer',
+            playerOrder: room.gameState.playerOrder.map(t => ({
+                token: t,
+                pseudo: players[t]?.pseudo,
+                isCurrent: t === currentPlayerToken
+            })),
+            message: `Le joueur ${player?.pseudo} a été éliminé. Raison : ${reason}`,
+        }))
+        } catch (e) {
+            console.error('Erreur eliminatedPlayer pour', player.pseudo, e.message);
+        }
+
+    if (wasCurrentPlayer) {
+        nextTurn(roomCode);
+    }
+    return;
 }
 
 export function finishGame(roomCode) {

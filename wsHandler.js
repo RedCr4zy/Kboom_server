@@ -232,9 +232,10 @@ export function initWebsocket(server) {
                 case 'start_game': {
                     const roomCode = payload.roomCode;
                     const maxRounds = payload.maxRounds || 2;
+                    const timerDuration = payload.timerDuration || 60000;
                     if (roomCode && roomCode != null) {
                         console.log('La partie :', roomCode, 'vient de commencer');
-                        gameManager.startGame(roomCode, maxRounds);
+                        gameManager.startGame(roomCode, maxRounds, timerDuration);
                     }
                     return;
                 }
@@ -251,9 +252,11 @@ export function initWebsocket(server) {
                 case 'send_answer': {
                     console.log('Validation de la réponse reçue :', payload);
                     const roomCode = payload.roomCode;
+                    const timeRemaining = payload.timeRemaining;
+                    const token = payload.token;
                     if (roomCode && roomCode != null) {
                         console.log('Validation de la réponse dans la partie :', roomCode);
-                        gameManager.validateAnswer(roomCode);
+                        gameManager.validateAnswer(roomCode, token, timeRemaining);
                     }
                     return;
                 }
@@ -268,6 +271,14 @@ export function initWebsocket(server) {
                         console.log('Réponse reçue pour la partie :', roomCode, 'avec la réponse :', answer);
                         gameManager.validateOrNot(roomCode, token, answer);
                     }
+                    return;
+                }
+
+                case 'timeout': {
+                    const roomCode = payload.roomCode;
+                    const token = payload.token;
+
+                    gameManager.elimiatePlayer(roomCode, token, 'timeout');
                     return;
                 }
             }
