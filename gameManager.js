@@ -31,7 +31,12 @@ function generateRoom() {
             timerConfig: {
                 duration: 60000
             },
-            playerTimers: {}
+            playerTimers: {
+                totalTimeLeft: null,
+                turnStartTimestamp: null,
+                isPaused: true,
+                isEliminated: false,
+            }
         }
     };
     console.log(`🔹 Room créée : ${roomCode}`);
