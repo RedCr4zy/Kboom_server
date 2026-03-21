@@ -176,7 +176,6 @@ export function startGame(roomCode, maxRounds, timerDuration) {
         }
 
         const isCurrentPlayer = playerToken === currentPlayerToken;
-
         try {
             player.ws.send(JSON.stringify({
                 type: 'gameStarted',
@@ -233,6 +232,13 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
 
     room.gameState.currentVote.votes = {}; // Réinitialiser les votes
 
+    const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
+        token: token,
+        pseudo: players[token]?.pseudo,
+        totalTimeLeft: timerData.totalTimeLeft,
+        isPaused: timerData.isPaused,
+    }));
+
     // Notifier tous les joueurs
     room.players.forEach(player => {
         try {
@@ -240,11 +246,7 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
                 type: 'answerValidated',
                 roomCode: roomCode,
                 message: 'La réponse a été validée',
-                allTimers: room.gameState.playerTimers.map(t => ({
-                    token: t,
-                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
-                    isPaused: room.gameState.playerTimers[t].isPaused,
-                })),
+                allTimers: allTimers,
 
             }));
         } catch(e) {
@@ -340,6 +342,13 @@ export function nextTurn(roomCode) {
     // Filtrer les joueurs encore connectés
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
 
+    const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
+        token: token,
+        pseudo: players[token]?.pseudo,
+        totalTimeLeft: timerData.totalTimeLeft,
+        isPaused: timerData.isPaused,
+    }));
+
     // Notifier tous les joueurs
     room.players.forEach((player, index) => {
         const playerToken = room.gameState.playerOrder[index];
@@ -362,11 +371,7 @@ export function nextTurn(roomCode) {
                 timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
                 isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
                 timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
-                allTimers: room.gameState.playerTimers.map(t => ({
-                    token: t,
-                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
-                    isPaused: room.gameState.playerTimers[t].isPaused,
-                })),
+                allTimers: allTimers,
                 message: isCurrentPlayer ? "C'est votre tour !" : `C'est au tour de ${currentPlayer?.pseudo}`,
             }));
         } catch(e) {
@@ -390,6 +395,13 @@ export function replayTurn(roomCode) {
 
     room.players = room.players.filter(p => p.ws.readyState=== p.ws.OPEN);
 
+    const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
+        token: token,
+        pseudo: players[token]?.pseudo,
+        totalTimeLeft: timerData.totalTimeLeft,
+        isPaused: timerData.isPaused,
+    }));
+
     room.players.forEach((player, index) => {
         const playerToken = room.gameState.playerOrder[index];
         const isCurrentPlayer = playerToken === currentPlayerToken;
@@ -409,11 +421,7 @@ export function replayTurn(roomCode) {
                 timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
                 isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
                 timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
-                allTimers: room.gameState.playerTimers.map(t => ({
-                    token: t,
-                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
-                    isPaused: room.gameState.playerTimers[t].isPaused,
-                })),
+                allTimers: allTimers,
                 message: isCurrentPlayer ? "C'est encore votre tour !" : `Le tour de ${currentPlayer?.pseudo} à refaire`,
             }))
         } catch (e) {
