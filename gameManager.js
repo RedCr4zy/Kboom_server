@@ -63,10 +63,12 @@ export function addPlayerToRoom(roomCode, playerToken, isMaster = false) {
     // ✅ AJOUT : Ajouter le joueur à l'ordre de passage
     rooms[roomCode].gameState.playerOrder.push(playerToken);
     rooms[roomCode].gameState.scores[playerToken] = 0;
-    rooms[roomCode].gameState.playerTimers[playerToken].totalTimeLeft = null;
-    rooms[roomCode].gameState.playerTimers[playerToken].turnStartTimestamp = null;
-    rooms[roomCode].gameState.playerTimers[playerToken].isPaused = true;
-    rooms[roomCode].gameState.playerTimers[playerToken].isEliminated = false;
+    rooms[roomCode].gameState.playerTimers[playerToken] = {
+        totalTimeLeft: null,
+        turnStartTimestamp: null,
+        isPaused: true,
+        isEliminated: false
+    };
     
     console.log(`✅ Joueur ${player.pseudo} ajouté à la room ${roomCode}`);
 
