@@ -131,13 +131,13 @@ export function startGame(roomCode, maxRounds, timerDuration) {
     room.gameState.currentLetter = chooseRandomLetter();
     room.gameState.maxRounds = maxRounds;
     room.gameState.timerConfig.duration = timerDuration;
-
+/*
     // Filtrer les joueurs connectés et mettre à jour l'ordre
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
     room.gameState.playerOrder = room.players.map((_, index) => {
         const token = Object.keys(players).find(t => players[t] === room.players[index]);
         return token;
-    }).filter(Boolean);
+    }).filter(Boolean);*/
 
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
