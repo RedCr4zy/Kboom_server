@@ -213,12 +213,12 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
     const playerTimer = room.gameState.playerTimers[playerToken];
     const marge = 2000;
 
-    const tempsEcoule = Date.now() - playerTimer.turnStartTimestamp;
-    const tempsRestant = playerTimer.totalTimeLeft - tempsEcoule;
+    let tempsEcoule = Date.now() - playerTimer.turnStartTimestamp;
+    let tempsRestant = playerTimer.totalTimeLeft - tempsEcoule;
 
-    const difference = Math.abs(tempsRestant - timeRemaining);
+    let difference = Math.abs(tempsRestant - timeRemaining);
 
-    const tempsRestantFinal = 0;
+    let tempsRestantFinal = 0;
 
     if (difference > marge) {
         tempsRestantFinal = tempsRestant
