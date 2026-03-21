@@ -32,10 +32,10 @@ function generateRoom() {
                 duration: 60000
             },
             playerTimers: {
-                totalTimeLeft: null,
+                /*totalTimeLeft: null,
                 turnStartTimestamp: null,
                 isPaused: true,
-                isEliminated: false,
+                isEliminated: false,*/
             }
         }
     };
@@ -150,6 +150,7 @@ export function startGame(roomCode, maxRounds, timerDuration) {
     room.players.forEach((player, index) => {
         const playerToken = room.gameState.playerOrder[index];
         const isCurrentPlayer = playerToken === currentPlayerToken;
+        const playerTimers = Object.entries(room.gameState.playerTimers)
         room.gameState.playerTimers[playerToken].totalTimeLeft = timerDuration;
 
         if (isCurrentPlayer) {
@@ -173,7 +174,7 @@ export function startGame(roomCode, maxRounds, timerDuration) {
                 timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
                 isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
                 timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
-                allTimers: room.gameState.playerTimers.map(t => ({
+                allTimers: playerTimers.map(t => ({
                     token: t,
                     totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
                     isPaused: room.gameState.playerTimers[t].isPaused,
