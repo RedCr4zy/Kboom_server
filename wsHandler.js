@@ -232,7 +232,7 @@ export function initWebsocket(server) {
                 case 'start_game': {
                     const roomCode = payload.roomCode;
                     const maxRounds = payload.maxRounds || 2;
-                    const timerDuration = payload.timerDuration || 60000;
+                    const timerDuration = payload.maxTime || 60000;
                     if (roomCode && roomCode != null) {
                         console.log('La partie :', roomCode, 'vient de commencer');
                         gameManager.startGame(roomCode, maxRounds, timerDuration);

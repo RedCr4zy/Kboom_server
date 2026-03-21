@@ -200,11 +200,13 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
     const playerTimer = room.gameState.playerTimers[playerToken];
     const marge = 2000;
 
-    tempsEcoule = Date.now() - playerTimer.turnStartTimestamp;
-    tempsRestant = playerTimer.totalTimeLeft - tempsEcoule;
+    const tempsEcoule = Date.now() - playerTimer.turnStartTimestamp;
+    const tempsRestant = playerTimer.totalTimeLeft - tempsEcoule;
 
-    difference = Math(tempsRestant - timeRemaining);
-    
+    const difference = Math.abs(tempsRestant - timeRemaining);
+
+    const tempsRestantFinal = 0;
+
     if (difference > marge) {
         tempsRestantFinal = tempsRestant
     }
@@ -212,8 +214,8 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
         tempsRestantFinal = (timeRemaining + tempsRestant) /2;
     }
 
-    playerTimer.totalTimeLeft = Math(tempsRestantFinal);
-    timerPlayer.isPaused = true;
+    playerTimer.totalTimeLeft = Math.floor(tempsRestantFinal);
+    playerTimer.isPaused = true;
     playerTimer.turnStartTimestamp = null;
 
     room.gameState.currentVote.votes = {}; // Réinitialiser les votes
@@ -407,52 +409,54 @@ export function replayTurn(roomCode) {
     })
 }
 
-export function elimiatePlayer(roomCode, playerToken, reason) {
-    if (!rooms[roomCode] && !rooms[roomCode].gameState.isStarted) {
+export function eliminatePlayer(roomCode, playerToken, reason) {
+    if (!rooms[roomCode] || !rooms[roomCode].gameState.isStarted) {
         console.log('❌ Room inexistante ou partie non démarrée');
         return;
     }
 
     const room = rooms[roomCode];
     const player = players[playerToken];
+    const wasCurrentPlayer = playerToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
-    playerTimers[playerToken].isEliminated = true;
-    playerTimers[playerToken].totalTimeLeft = 0;
-    playerTimers[playerToken].isPaused = true;
+    room.gameState.playerTimers[playerToken].isEliminated = true;
+    room.gameState.playerTimers[playerToken].totalTimeLeft = 0;
+    room.gameState.playerTimers[playerToken].isPaused = true;
 
-    if (playerToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex]) {
-        wasCurrentPlayer = true;
-    }
 
     room.gameState.playerList = room.gameState.playerOrder.filter(t => t !== playerToken);
     console.log(`👤 ${player?.pseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
 
-    if (currentPlayerIndex >= playerOrder.length) {
+    if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
     }
-    if (playerOrder.length === 1) {
+    if (room.gameState.playerOrder.length === 1) {
         console.log(`🏁 Partie terminée dans la room ${roomCode} (Tous les joueurs éliminés)`);
         finishGame(roomCode);
         return;
     }
+    room.players.forEach((player, index) => {
+        const playerToken = room.gameState.playerOrder[index];
+        const isCurrentPlayer = playerToken === currentPlayerToken;
 
-    try {
-        player.ws.send(JSON.stringify({
-            type: 'eliminatedPlayer',
-            playerOrder: room.gameState.playerOrder.map(t => ({
-                token: t,
-                pseudo: players[t]?.pseudo,
-                isCurrent: t === currentPlayerToken
-            })),
-            message: `Le joueur ${player?.pseudo} a été éliminé. Raison : ${reason}`,
-        }))
-        } catch (e) {
-            console.error('Erreur eliminatedPlayer pour', player.pseudo, e.message);
+        try {
+            player.ws.send(JSON.stringify({
+                type: 'playerEliminated',
+                playerOrder: room.gameState.playerOrder.map(t => ({
+                    token: t,
+                    pseudo: players[t]?.pseudo,
+                    isCurrent: t === currentPlayerToken,
+                })),
+                message: `Le joueur ${player?.pseudo} a été éliminé. Raison : ${reason}`,
+            }))
+            } catch (e) {
+                console.error('Erreur eliminatedPlayer pour', player.pseudo, e.message);
+            }
+
+        if (wasCurrentPlayer) {
+            nextTurn(roomCode);
         }
-
-    if (wasCurrentPlayer) {
-        nextTurn(roomCode);
-    }
+    });
     return;
 }
 
