@@ -131,13 +131,15 @@ export function startGame(roomCode, maxRounds, timerDuration) {
     room.gameState.currentLetter = chooseRandomLetter();
     room.gameState.maxRounds = maxRounds;
     room.gameState.timerConfig.duration = timerDuration;
-/*
-    // Filtrer les joueurs connectés et mettre à jour l'ordre
+
+    // Filtrer les joueurs connectés
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
-    room.gameState.playerOrder = room.players.map((_, index) => {
-        const token = Object.keys(players).find(t => players[t] === room.players[index]);
-        return token;
-    }).filter(Boolean);*/
+    
+    // ✅ CORRECTION : Ne pas recréer playerOrder, juste filtrer pour garder les joueurs connectés
+    room.gameState.playerOrder = room.gameState.playerOrder.filter(token => {
+        const player = players[token];
+        return player && room.players.includes(player);
+    });
 
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
@@ -146,17 +148,34 @@ export function startGame(roomCode, maxRounds, timerDuration) {
     console.log(`👤 Premier joueur : ${players[currentPlayerToken]?.pseudo}`);
     console.log(`📋 Ordre de passage :`, room.gameState.playerOrder.map(t => players[t]?.pseudo));
 
-    // Envoyer à tous les joueurs
-    room.players.forEach((player, index) => {
-        const playerToken = room.gameState.playerOrder[index];
-        const isCurrentPlayer = playerToken === currentPlayerToken;
-        const playerTimers = Object.entries(room.gameState.playerTimers)
-        room.gameState.playerTimers[playerToken].totalTimeLeft = timerDuration;
+    // Initialiser TOUS les timers AVANT la boucle
+    room.gameState.playerOrder.forEach(token => {
+        room.gameState.playerTimers[token].totalTimeLeft = timerDuration;
+    });
 
-        if (isCurrentPlayer) {
-            room.gameState.playerTimers[playerToken].isPaused = false;
-            room.gameState.playerTimers[playerToken].turnStartTimestamp = Date.now();
+    // Démarrer le timer du joueur actif
+    room.gameState.playerTimers[currentPlayerToken].isPaused = false;
+    room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp = Date.now();
+
+    // Créer allTimers UNE SEULE FOIS avant la boucle
+    const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
+        token: token,
+        pseudo: players[token]?.pseudo,
+        totalTimeLeft: timerData.totalTimeLeft,
+        isPaused: timerData.isPaused,
+    }));
+
+    // Envoyer à tous les joueurs
+    room.players.forEach((player) => {
+        // Trouver le token du joueur actuel
+        const playerToken = room.gameState.playerOrder.find(token => players[token] === player);
+        
+        if (!playerToken) {
+            console.error('Token non trouvé pour', player.pseudo);
+            return;
         }
+
+        const isCurrentPlayer = playerToken === currentPlayerToken;
 
         try {
             player.ws.send(JSON.stringify({
@@ -173,13 +192,8 @@ export function startGame(roomCode, maxRounds, timerDuration) {
                 maxRounds: room.gameState.maxRounds,
                 timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
                 isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
-                timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
-                allTimers: playerTimers.map(t => ({
-                    token: t,
-                    totalTimeLeft: room.gameState.playerTimers[t].totalTimeLeft,
-                    isPaused: room.gameState.playerTimers[t].isPaused,
-                })),
-
+                timerStartTimestamp: room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp,
+                allTimers: allTimers,
                 message: 'La partie a commencé',
             }));
         } catch(e) {
@@ -187,7 +201,6 @@ export function startGame(roomCode, maxRounds, timerDuration) {
         }
     });
 }
-
 export function validateAnswer(roomCode, playerToken, timeRemaining) {
     const room = rooms[roomCode];
 
