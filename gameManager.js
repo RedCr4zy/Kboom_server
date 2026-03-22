@@ -455,7 +455,16 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
         return;
     }
 
-    room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex % room.gameState.playerOrder.length;
+    //room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex % room.gameState.playerOrder.length;
+    //room.gameState.currentPlayerIndex
+    if(room.GameState.currentPlayerIndex == 0) {
+        room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex.length;
+        console.log('Passage au dernier joueur (car le joueur éliminé était le premier de la liste)');
+    }
+    else {
+        room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex - 1;
+        console.log('Passage au joueur précédent (car le joueur éliminé n\'était pas le premier de la liste)');
+    }
 
     const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
         token: token,
