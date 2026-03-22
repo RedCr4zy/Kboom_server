@@ -350,8 +350,8 @@ export function nextTurn(roomCode) {
     }));
 
     // Notifier tous les joueurs
-    room.players.forEach((player, index) => {
-        const playerToken = room.gameState.playerOrder[index];
+    room.players.forEach((player) => {
+        const playerToken = Object.keys(players).find(t => players[t] === player);
         const isCurrentPlayer = playerToken === currentPlayerToken;
 
         try {
@@ -402,8 +402,8 @@ export function replayTurn(roomCode) {
         isPaused: timerData.isPaused,
     }));
 
-    room.players.forEach((player, index) => {
-        const playerToken = room.gameState.playerOrder[index];
+    room.players.forEach((player) => {
+        const playerToken = Object.keys(players).find(t => players[t] === player);
         const isCurrentPlayer = playerToken === currentPlayerToken;
 
         try {
@@ -446,24 +446,21 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
     room.gameState.playerTimers[playerToken].isPaused = true;
 
 
-    room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== playerToken);
-    console.log(`👤 ${player?.pseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
-
     if (room.gameState.playerOrder.length === 0) {
         console.log(`🏁 Partie terminée dans la room ${roomCode} (Tous les joueurs éliminés)`);
         finishGame(roomCode);
         return;
     }
+    
+    console.log(`👤 ${player?.pseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
+    const removedIndex = room.gameState.playerOrder.indexOf(playerToken);    
+    room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== playerToken);
 
-    //room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex % room.gameState.playerOrder.length;
-    //room.gameState.currentPlayerIndex
-    if(room.gameState.currentPlayerIndex == 0) {
-        room.gameState.currentPlayerIndex = room.gameState.playerOrder.length - 1;
-        console.log('Passage au dernier joueur (car le joueur éliminé était le premier de la liste)');
+    if (removedIndex < room.gameState.currentPlayerIndex) {
+    room.gameState.currentPlayerIndex--;
     }
-    else {
-        room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex - 1;
-        console.log('Passage au joueur précédent (car le joueur éliminé n\'était pas le premier de la liste)');
+    if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
+        room.gameState.currentPlayerIndex = 0;
     }
 
     const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
@@ -473,16 +470,15 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
         isPaused: timerData.isPaused,
     }));
 
-    room.players.forEach((p, index) => {
-        //const currentToken = room.gameState.playerOrder[index];
-        //const isCurrentPlayer = currentToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex];
+    room.players.forEach((p) => {
+        const playerToken = Object.keys(players).find(t => players[t] === p);
 
         try {
             p.ws.send(JSON.stringify({
                 type: 'playerEliminated',
                 playerOrder: room.gameState.playerOrder.map(t => ({
                     token: t,
-                    pseudo: players[t]?.pseudo,
+                    pseudo: players[t]?.pseudo || 'Inconnu',
                     isCurrent: t === room.gameState.playerOrder[room.gameState.currentPlayerIndex],
                 })),
                 allTimers: allTimers,
@@ -508,8 +504,8 @@ export function finishGame(roomCode) {
         return;
     }
 
-    room.players.forEach((player, index) => {
-        const playerToken = room.gameState.playerOrder[index];
+    room.players.forEach((player) => {
+        const playerToken = Object.keys(players).find(t => players[t] === player);
 
         try {
             player.ws.send(JSON.stringify({
@@ -567,8 +563,8 @@ export function removePlayerFromRoom(playerToken) {
         const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
         const currentPlayer = players[currentPlayerToken];
 
-        room.players.forEach((p, index) => {
-            const pToken = room.gameState.playerOrder[index];
+        room.players.forEach((p) => {
+            const pToken = Object.keys(players).find(t => players[t] === p);
             try {
                 p.ws.send(JSON.stringify({
                     type: 'playerLeft',
