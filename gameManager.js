@@ -457,6 +457,13 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
 
     room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex % room.gameState.playerOrder.length;
 
+    const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
+        token: token,
+        pseudo: players[token]?.pseudo,
+        totalTimeLeft: timerData.totalTimeLeft,
+        isPaused: timerData.isPaused,
+    }));
+
     room.players.forEach((p, index) => {
         //const currentToken = room.gameState.playerOrder[index];
         //const isCurrentPlayer = currentToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex];
@@ -469,6 +476,7 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
                     pseudo: players[t]?.pseudo,
                     isCurrent: t === room.gameState.playerOrder[room.gameState.currentPlayerIndex],
                 })),
+                allTimers: allTimers,
                 playerToken: playerToken,
                 playerPseudo: playerPseudo,
                 message: `Le joueur ${playerPseudo} a été éliminé. Raison : ${reason}`,
