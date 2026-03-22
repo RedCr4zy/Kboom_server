@@ -446,42 +446,41 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
     room.gameState.playerTimers[playerToken].isPaused = true;
 
 
-    room.gameState.playerList = room.gameState.playerOrder.filter(t => t !== playerToken);
+    room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== playerToken);
     console.log(`👤 ${player?.pseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
 
-    if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
-        room.gameState.currentPlayerIndex = 0;
-    }
-    if (room.gameState.playerOrder.length === 1) {
+    if (room.gameState.playerOrder.length === 0) {
         console.log(`🏁 Partie terminée dans la room ${roomCode} (Tous les joueurs éliminés)`);
         finishGame(roomCode);
         return;
     }
-    room.players.forEach((player, index) => {
-        const playerToken = room.gameState.playerOrder[index];
-        const isCurrentPlayer = playerToken === playerToken;
+
+    room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex % room.gameState.playerOrder.length;
+
+    room.players.forEach((p, index) => {
+        //const currentToken = room.gameState.playerOrder[index];
+        //const isCurrentPlayer = currentToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
         try {
-            player.ws.send(JSON.stringify({
+            p.ws.send(JSON.stringify({
                 type: 'playerEliminated',
                 playerOrder: room.gameState.playerOrder.map(t => ({
                     token: t,
                     pseudo: players[t]?.pseudo,
-                    isCurrent: t === playerToken,
+                    isCurrent: t === room.gameState.playerOrder[room.gameState.currentPlayerIndex],
                 })),
                 playerToken: playerToken,
                 playerPseudo: playerPseudo,
-                message: `Le joueur ${player?.pseudo} a été éliminé. Raison : ${reason}`,
+                message: `Le joueur ${playerPseudo} a été éliminé. Raison : ${reason}`,
             }))
-            console.log(`🔔 Notifié ${player.pseudo} de l'élimination de ${playerPseudo}`);
+            console.log(`🔔 Notifié ${p.pseudo} de l'élimination de ${playerPseudo}`);
             } catch (e) {
-                console.error('Erreur eliminatedPlayer pour', player.pseudo, e.message);
+                console.error('Erreur eliminatedPlayer pour', p.pseudo, e.message);
             }
-
-        if (wasCurrentPlayer) {
-            nextTurn(roomCode);
-        }
-    });
+        });
+    if (wasCurrentPlayer) {
+        nextTurn(roomCode);
+    }
     return;
 }
 
