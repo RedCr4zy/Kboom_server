@@ -457,8 +457,8 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
 
     //room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex % room.gameState.playerOrder.length;
     //room.gameState.currentPlayerIndex
-    if(room.GameState.currentPlayerIndex == 0) {
-        room.gameState.currentPlayerIndex = room.gameState.currentPlayerIndex.length;
+    if(room.gameState.currentPlayerIndex == 0) {
+        room.gameState.currentPlayerIndex = room.gameState.playerOrder.length - 1;
         console.log('Passage au dernier joueur (car le joueur éliminé était le premier de la liste)');
     }
     else {
