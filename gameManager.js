@@ -438,6 +438,7 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
 
     const room = rooms[roomCode];
     const player = players[playerToken];
+    const playerPseudo = player?.pseudo || 'Inconnu';
     const wasCurrentPlayer = playerToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
     room.gameState.playerTimers[playerToken].isEliminated = true;
@@ -468,8 +469,11 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
                     pseudo: players[t]?.pseudo,
                     isCurrent: t === currentPlayerToken,
                 })),
+                playerToken: playerToken,
+                playerPseudo: playerPseudo,
                 message: `Le joueur ${player?.pseudo} a été éliminé. Raison : ${reason}`,
             }))
+            console.log(`🔔 Notifié ${player.pseudo} de l'élimination de ${playerPseudo}`);
             } catch (e) {
                 console.error('Erreur eliminatedPlayer pour', player.pseudo, e.message);
             }

@@ -278,7 +278,7 @@ export function initWebsocket(server) {
                     const roomCode = payload.roomCode;
                     const token = payload.token;
 
-                    gameManager.elimiatePlayer(roomCode, token, 'timeout');
+                    gameManager.eliminatePlayer(roomCode, token, 'timeout');
                     return;
                 }
             }
