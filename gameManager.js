@@ -459,7 +459,7 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
     }
     room.players.forEach((player, index) => {
         const playerToken = room.gameState.playerOrder[index];
-        const isCurrentPlayer = playerToken === currentPlayerToken;
+        const isCurrentPlayer = playerToken === playerToken;
 
         try {
             player.ws.send(JSON.stringify({
@@ -467,7 +467,7 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
                 playerOrder: room.gameState.playerOrder.map(t => ({
                     token: t,
                     pseudo: players[t]?.pseudo,
-                    isCurrent: t === currentPlayerToken,
+                    isCurrent: t === playerToken,
                 })),
                 playerToken: playerToken,
                 playerPseudo: playerPseudo,
