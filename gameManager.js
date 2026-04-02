@@ -212,47 +212,60 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
     const playerTimer = room.gameState.playerTimers[playerToken];
     const marge = 2000;
 
+    // Calul serveur
     let tempsEcoule = Date.now() - playerTimer.turnStartTimestamp;
-    let tempsRestant = playerTimer.totalTimeLeft - tempsEcoule;
+    let tempsRestantServeur = playerTimer.totalTimeLeft - tempsEcoule;
 
-    let difference = Math.abs(tempsRestant - timeRemaining);
+    if (tempsRestantServeur < 0) {
+        tempsRestantServeur = 0;
+    }
 
-    let tempsRestantFinal = 0;
+    // Difference
+    let difference = Math.abs(tempsRestantServeur - timeRemaining);
 
+    // Décision
     if (difference > marge) {
-        tempsRestantFinal = tempsRestant
+        tempsRestantFinal = tempsRestantServeur;
+        console.log(`⚠️ Difference suspecte : client=${timeRemaining}, serveur=${timeRemaining}`);
     }
     else {
-        tempsRestantFinal = (timeRemaining + tempsRestant) /2;
+        tempsRestantFinal = (tempsRestantServeur + timeRemaining) / 2;
     }
 
+    if (tempsRestantFinal < 0) {
+        tempsRestantFinal = 0;
+    }
+
+    // Mise à jour
     playerTimer.totalTimeLeft = Math.floor(tempsRestantFinal);
     playerTimer.isPaused = true;
     playerTimer.turnStartTimestamp = null;
 
-    room.gameState.currentVote.votes = {}; // Réinitialiser les votes
+    // Reset votes
+    room.gameState.currentVote.votes = {};
 
+    // Créer allTimers
     const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
         token: token,
         pseudo: players[token]?.pseudo,
         totalTimeLeft: timerData.totalTimeLeft,
         isPaused: timerData.isPaused,
+        isEliminated: timerData.isEliminated,
     }));
 
-    // Notifier tous les joueurs
-    room.players.forEach(player => {
+    // Envoyer à tous les joueurs
+    room.player.forEach(player => {
         try {
             player.ws.send(JSON.stringify({
                 type: 'answerValidated',
                 roomCode: roomCode,
                 message: 'La réponse a été validée',
                 allTimers: allTimers,
-
             }));
         } catch(e) {
             console.error('Erreur validateAnswer pour', player.pseudo, e.message);
         }
-    });
+    })
 }
 
 export function validateOrNot(roomCode, playerToken, answer) {
