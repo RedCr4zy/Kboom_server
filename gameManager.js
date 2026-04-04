@@ -44,7 +44,7 @@ function generateRoom() {
 }
 
 function applyMalusToActivePlayer(room, currentPlayerToken) {
-    roomCode = room;
+    const roomCode = room;
     if (rooms[roomCode].gameState.playerOrder.length <= 2) {
         console.log("Pas de malus à 2 joueurs")
         return;
