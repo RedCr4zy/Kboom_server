@@ -87,11 +87,12 @@ function applyMalusToWrongNoVoters(room, currentPlayerToken) {
 }
 
 function applyMalusToWrongYesVoters(room, currentPlayerToken) {
+    const roomCode = room;
     if (rooms[roomCode].gameState.playerOrder.length <= 2) {
         return;
     }
 
-    room.gameState.currentVote.votes.forEach((cote, token) => {
+    room.gameState.currentVote.votes.forEach((vote, token) => {
         if (vote === true) {
             room.gameState.malus[token].wrongYesVotes++;
             wrongCount = rooms.gameState.malus[token].wrongYesVotes;
@@ -405,7 +406,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
         else {
             console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
             applyMalusToActivePlayer(room, currentPlayerToken);
-            applyMalusToWrongYesVoters(rooms, currentPlayerToken);
+            applyMalusToWrongYesVoters(room, currentPlayerToken);
             replayTurn(roomCode);
         }
     }
