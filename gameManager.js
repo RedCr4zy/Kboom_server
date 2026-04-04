@@ -337,7 +337,7 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
     }));
 
     // Envoyer à tous les joueurs
-    room.player.forEach(player => {
+    room.players.forEach(player => {
         try {
             player.ws.send(JSON.stringify({
                 type: 'answerValidated',
