@@ -408,8 +408,8 @@ export function validateOrNot(roomCode, playerToken, answer) {
         }
         else {
             console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
-            applyMalusToActivePlayer(room, currentPlayerToken);
-            applyMalusToWrongYesVoters(room, currentPlayerToken);
+            applyMalusToActivePlayer(roomCode, currentPlayerToken);
+            applyMalusToWrongYesVoters(roomCode, currentPlayerToken);
             replayTurn(roomCode);
         }
     }
