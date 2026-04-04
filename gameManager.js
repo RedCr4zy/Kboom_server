@@ -457,12 +457,13 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
 
     const room = rooms[roomCode];
     const player = players[playerToken];
-    const playerPseudo = player?.pseudo || 'Inconnu';
+    const eliminatedPlayerPseudo = player?.pseudo || 'Inconnu';
+    const eliminatedPlayerToken = playerToken;
     const wasCurrentPlayer = playerToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
-    room.gameState.playerTimers[playerToken].isEliminated = true;
-    room.gameState.playerTimers[playerToken].totalTimeLeft = 0;
-    room.gameState.playerTimers[playerToken].isPaused = true;
+    room.gameState.playerTimers[eliminatedPlayerToken].isEliminated = true;
+    room.gameState.playerTimers[eliminatedPlayerToken].totalTimeLeft = 0;
+    room.gameState.playerTimers[eliminatedPlayerToken].isPaused = true;
 
 
     if (room.gameState.playerOrder.length === 0) {
@@ -471,12 +472,12 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
         return;
     }
     
-    console.log(`👤 ${player?.pseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
-    const removedIndex = room.gameState.playerOrder.indexOf(playerToken);    
-    room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== playerToken);
+    console.log(`👤 ${eliminatedPlayerPseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
+    const removedIndex = room.gameState.playerOrder.indexOf(eliminatedPlayerToken);    
+    room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== eliminatedPlayerToken);
 
     if (removedIndex < room.gameState.currentPlayerIndex) {
-    room.gameState.currentPlayerIndex--;
+        room.gameState.currentPlayerIndex--;
     }
     if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
@@ -501,11 +502,11 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
                     isCurrent: t === room.gameState.playerOrder[room.gameState.currentPlayerIndex],
                 })),
                 allTimers: allTimers,
-                playerToken: playerToken,
-                playerPseudo: playerPseudo,
-                message: `Le joueur ${playerPseudo} a été éliminé. Raison : ${reason}`,
+                playerToken: eliminatedPlayerToken,
+                playerPseudo: eliminatedPlayerPseudo,
+                message: `Le joueur ${eliminatedPlayerPseudo} a été éliminé. Raison : ${reason}`,
             }))
-            console.log(`🔔 Notifié ${p.pseudo} de l'élimination de ${playerPseudo}`);
+            console.log(`🔔 Notifié ${p.pseudo} de l'élimination de ${eliminatedPlayerPseudo}`);
             } catch (e) {
                 console.error('Erreur eliminatedPlayer pour', p.pseudo, e.message);
             }
