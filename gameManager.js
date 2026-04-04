@@ -54,11 +54,11 @@ function applyMalusToActivePlayer(room, currentPlayerToken) {
     }
 
     rooms[roomCode].gameState.malus[currentPlayerToken].refusedWords++;
-    refusedCount = rooms[roomCode].gameState.malus[currentPlayerToken].refusedWords;
+    let refusedCount = rooms[roomCode].gameState.malus[currentPlayerToken].refusedWords;
 
     if (refusedCount >= 2) {
         rooms[roomCode].gameState.malus[currentPlayerToken].totalMalus += 10000;
-        pseudo = players[currentPlayerToken]?.pseudo;
+        let pseudo = players[currentPlayerToken]?.pseudo;
         console.log(`⚠️ Malus de 10s pour ${pseudo} (2 mots refusés)`);
     }
     return;
@@ -77,11 +77,11 @@ function applyMalusToWrongNoVoters(room, currentPlayerToken) {
 
         if (vote === false) {
             rooms[roomCode].gameState.malus[token].wrongNoVotes++;
-            wrongCount = rooms[roomCode].gameState.malus[token].wrongNoVotes;
+            let wrongCount = rooms[roomCode].gameState.malus[token].wrongNoVotes;
 
-            if (wrongNoVotes >= 2) {
+            if (wrongCount >= 2) {
                 rooms[roomCode].gameState.malus[token].totalMalus += 15000;
-                pseudo = players[token]?.pseudo;
+                let pseudo = players[token]?.pseudo;
                 console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "non" incorrects)`);
             }
         }
@@ -98,11 +98,11 @@ function applyMalusToWrongYesVoters(room, currentPlayerToken) {
     rooms[roomCode].gameState.currentVote.votes.forEach((vote, token) => {
         if (vote === true) {
             rooms[roomCode].gameState.malus[token].wrongYesVotes++;
-            wrongCount = rooms[roomCode].gameState.malus[token].wrongYesVotes;
+            let wrongCount = rooms[roomCode].gameState.malus[token].wrongYesVotes;
 
-            if (wrongYesVotess >= 2) {
+            if (wrongCount >= 2) {
                 rooms[roomCode].gameState.malus[token].totalMalus += 15000;
-                pseudo = players[token]?.pseudo;
+                let pseudo = players[token]?.pseudo;
                 console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "oui" incorrects)`);
             }
         }
