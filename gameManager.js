@@ -303,6 +303,7 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
 
     // Difference
     let difference = Math.abs(tempsRestantServeur - timeRemaining);
+    let tempsRestantFinal;
 
     // Décision
     if (difference > marge) {
