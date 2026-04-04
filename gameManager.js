@@ -43,7 +43,68 @@ function generateRoom() {
     return roomCode;
 }
 
-/**
+function applyMalusToActivePlayer(room, currentPlayerToken) {
+    roomCode = room;
+    if (rooms[roomCode].gameState.playerOrder.length <= 2) {
+        console.log("Pas de malus à 2 joueurs")
+        return;
+    }
+
+    room.gameState.malus[currentPlayerToken].refusedWords++;
+    refusedCount = room.gameState.malus[currentPlayerToken].refusedWords;
+
+    if (refusedCount >= 2) {
+        room.gameState.malus[currentPlayerToken].totalMalus += 10000;
+        pseudo = players[currentPlayerToken]?.pseudo;
+        console.log(`⚠️ Malus de 10s pour ${pseudo} (2 mots refusés)`);
+    }
+    return;
+}
+
+function applyMalusToWrongNoVoters(room, currentPlayerToken) {
+    if (rooms[roomCode].gameState.playerOrder.length <= 2) {
+        return;
+    }
+
+    room.gameState.currentVote.votes.forEach((vote, token) => {
+        if (token === currentPlayerToken) {
+            return;
+        }
+
+        if (vote === false) {
+            room.gameState.malus[token].wrongNoVotes++;
+            wrongCount = room.gameState;malus[token].wrongNoVotes;
+
+            if (wrongNoVotes >= 2) {
+                room.gameState.malus[token].totalMalus += 15000;
+                pseudo = players[token]?.pseudo;
+                console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "non" incorrects)`);
+            }
+        }
+    });
+    return;
+}
+
+function applyMalusToWrongYesVoters(room, currentPlayerToken) {
+    if (rooms[roomCode].gameState.playerOrder.length <= 2) {
+        return;
+    }
+
+    room.gameState.currentVote.votes.forEach((cote, token) => {
+        if (vote === true) {
+            room.gameState.malus[token].wrongYesVotes++;
+            wrongCount = rooms.gameState.malus[token].wrongYesVotes;
+
+            if (wrongYesVotess >= 2) {
+                room.gameState.malus[token].totalMalus += 15000;
+                pseudo = players[token]?.pseudo;
+                console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "oui" incorrects)`);
+            }
+        }
+    })
+}
+
+/*
  * Ajoute un joueur à une room
  */
 export function addPlayerToRoom(roomCode, playerToken, isMaster = false) {
@@ -68,6 +129,12 @@ export function addPlayerToRoom(roomCode, playerToken, isMaster = false) {
         turnStartTimestamp: null,
         isPaused: true,
         isEliminated: false
+    };
+    rooms[roomCode].gameState.malus[playerToken] = {
+        totalMalus: 0,
+        refusedWords: 0,
+        wrongNoVotes: 0,
+        wrongYesVotes: 0,
     };
     
     console.log(`✅ Joueur ${player.pseudo} ajouté à la room ${roomCode}`);
@@ -150,7 +217,19 @@ export function startGame(roomCode, maxRounds, timerDuration) {
 
     // Initialiser TOUS les timers AVANT la boucle
     room.gameState.playerOrder.forEach(token => {
-        room.gameState.playerTimers[token].totalTimeLeft = timerDuration;
+        room.gameState.playerOrder.forEach(token => {
+            const malusJoueur = room.gameState.malus[token]?.totalMalus || 0;
+            let tempsInitial = timerDuration - malusJoueur;
+
+            if (tempsInitial < 0 ) tempsInitial = 0;
+
+            room.gameState.playerTimers[token].totalTimeLeft = tempsInitial;
+
+            if (malusJoueur > 0) {
+                const pseudo = players[token]?.pseudo;
+                console.log(`⚠️ ${pseudo} commence avec ${tempsInitial}ms (malus de ${malusJoueur}ms)`);
+            }
+        })
     });
 
     // Démarrer le timer du joueur actif
@@ -163,6 +242,8 @@ export function startGame(roomCode, maxRounds, timerDuration) {
         pseudo: players[token]?.pseudo,
         totalTimeLeft: timerData.totalTimeLeft,
         isPaused: timerData.isPaused,
+        isEliminated: timerData.isEliminated,
+        malus: room.gameState.malus[token]?.totalMalus || 0,
     }));
 
     // Envoyer à tous les joueurs
@@ -251,6 +332,7 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
         totalTimeLeft: timerData.totalTimeLeft,
         isPaused: timerData.isPaused,
         isEliminated: timerData.isEliminated,
+        malus: room.gameState.malus[token]?.totalMalus || 0,
     }));
 
     // Envoyer à tous les joueurs
@@ -284,6 +366,10 @@ export function validateOrNot(roomCode, playerToken, answer) {
     const totalPlayers = room.gameState.playerOrder.length;
     const totalVotes = Object.keys(room.gameState.currentVote.votes).length;
 
+    if (totalVotes !== totalPlayers) {
+        return;
+    }
+
     if (totalVotes === totalPlayers) {
         // Calculer le score des joueurs
         let vote_pour = 0;
@@ -304,13 +390,20 @@ export function validateOrNot(roomCode, playerToken, answer) {
 
         const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
+        if (results === 0) {
+            console.log(`⚖️ Egalité dans la room ${roomCode} : Aucun malus`)
+        }
+
         if (results > 0) {
             console.log(`✅ La réponse est validée pour la room ${roomCode}`);
             room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
+            applyMalusToWrongNoVoters(room, currentPlayerToken);
             nextTurn(roomCode);
         }
         else {
             console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
+            applyMalusToActivePlayer(room, currentPlayerToken);
+            applyMalusToWrongYesVoters(rooms, currentPlayerToken);
             replayTurn(roomCode);
         }
     }
@@ -366,6 +459,8 @@ export function nextTurn(roomCode) {
         pseudo: players[token]?.pseudo,
         totalTimeLeft: timerData.totalTimeLeft,
         isPaused: timerData.isPaused,
+        isEliminated: timerData.isEliminated,
+        malus: room.gameState.malus[token]?.totalMalus || 0,
     }));
 
     // Notifier tous les joueurs
@@ -419,6 +514,8 @@ export function replayTurn(roomCode) {
         pseudo: players[token]?.pseudo,
         totalTimeLeft: timerData.totalTimeLeft,
         isPaused: timerData.isPaused,
+        isEliminated: timerData.isEliminated,
+        malus: room.gameState.malus[token]?.totalMalus || 0,
     }));
 
     room.players.forEach((player) => {
@@ -488,6 +585,8 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
         pseudo: players[token]?.pseudo,
         totalTimeLeft: timerData.totalTimeLeft,
         isPaused: timerData.isPaused,
+        isEliminated: timerData.isEliminated,
+        malus: room.gameState.malus[token]?.totalMalus || 0,
     }));
 
     room.players.forEach((p) => {
