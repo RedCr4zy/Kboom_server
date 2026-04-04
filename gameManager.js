@@ -328,6 +328,12 @@ export function nextTurn(roomCode) {
         return;
     }
 
+    if (room.gameState.playerOrder.length === 0) {
+        console.log(`🏁 Partie terminée dans la room ${roomCode} (Tous les joueurs éliminés)`);
+        finishGame(roomCode);
+        return;
+    }
+
     // Passer au joueur suivant
     room.gameState.currentPlayerIndex++;
     
