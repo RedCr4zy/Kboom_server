@@ -53,11 +53,11 @@ function applyMalusToActivePlayer(room, currentPlayerToken) {
         return;
     }
 
-    room.gameState.malus[currentPlayerToken].refusedWords++;
-    refusedCount = room.gameState.malus[currentPlayerToken].refusedWords;
+    rooms[roomCode].gameState.malus[currentPlayerToken].refusedWords++;
+    refusedCount = rooms[roomCode].gameState.malus[currentPlayerToken].refusedWords;
 
     if (refusedCount >= 2) {
-        room.gameState.malus[currentPlayerToken].totalMalus += 10000;
+        rooms[roomCode].gameState.malus[currentPlayerToken].totalMalus += 10000;
         pseudo = players[currentPlayerToken]?.pseudo;
         console.log(`⚠️ Malus de 10s pour ${pseudo} (2 mots refusés)`);
     }
@@ -70,17 +70,17 @@ function applyMalusToWrongNoVoters(room, currentPlayerToken) {
         return;
     }
 
-    room.gameState.currentVote.votes.forEach((vote, token) => {
+    rooms[roomCode].gameState.currentVote.votes.forEach((vote, token) => {
         if (token === currentPlayerToken) {
             return;
         }
 
         if (vote === false) {
-            room.gameState.malus[token].wrongNoVotes++;
-            wrongCount = room.gameState;malus[token].wrongNoVotes;
+            rooms[roomCode].gameState.malus[token].wrongNoVotes++;
+            wrongCount = rooms[roomCode].gameState.malus[token].wrongNoVotes;
 
             if (wrongNoVotes >= 2) {
-                room.gameState.malus[token].totalMalus += 15000;
+                rooms[roomCode].gameState.malus[token].totalMalus += 15000;
                 pseudo = players[token]?.pseudo;
                 console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "non" incorrects)`);
             }
@@ -95,13 +95,13 @@ function applyMalusToWrongYesVoters(room, currentPlayerToken) {
         return;
     }
 
-    room.gameState.currentVote.votes.forEach((vote, token) => {
+    rooms[roomCode].gameState.currentVote.votes.forEach((vote, token) => {
         if (vote === true) {
-            room.gameState.malus[token].wrongYesVotes++;
-            wrongCount = rooms.gameState.malus[token].wrongYesVotes;
+            rooms[roomCode].gameState.malus[token].wrongYesVotes++;
+            wrongCount = rooms[roomCode].gameState.malus[token].wrongYesVotes;
 
             if (wrongYesVotess >= 2) {
-                room.gameState.malus[token].totalMalus += 15000;
+                rooms[roomCode].gameState.malus[token].totalMalus += 15000;
                 pseudo = players[token]?.pseudo;
                 console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "oui" incorrects)`);
             }
