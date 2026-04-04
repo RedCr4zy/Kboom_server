@@ -70,7 +70,7 @@ function applyMalusToWrongNoVoters(room, currentPlayerToken) {
         return;
     }
 
-    rooms[roomCode].gameState.currentVote.votes.forEach((vote, token) => {
+    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([vote, token]) => {
         if (token === currentPlayerToken) {
             return;
         }
@@ -95,7 +95,7 @@ function applyMalusToWrongYesVoters(room, currentPlayerToken) {
         return;
     }
 
-    rooms[roomCode].gameState.currentVote.votes.forEach((vote, token) => {
+    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([vote, token]) => {
         if (vote === true) {
             rooms[roomCode].gameState.malus[token].wrongYesVotes++;
             let wrongCount = rooms[roomCode].gameState.malus[token].wrongYesVotes;
