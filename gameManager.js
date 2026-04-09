@@ -44,20 +44,16 @@ function generateRoom() {
 }
 
 function applyMalusToActivePlayer(room, currentPlayerToken) {
-    const roomCode = room;
-    console.log(roomCode);
-    console.log(rooms[roomCode]);
-    console.log(rooms[roomCode].gameState.playerOrder.length);
-    if (rooms[roomCode].gameState.playerOrder.length <= 2) {
+    if (room.gameState.playerOrder.length <= 2) {
         console.log("Pas de malus à 2 joueurs")
         return;
     }
 
-    rooms[roomCode].gameState.malus[currentPlayerToken].refusedWords++;
-    let refusedCount = rooms[roomCode].gameState.malus[currentPlayerToken].refusedWords;
+    room.gameState.malus[currentPlayerToken].refusedWords++;
+    let refusedCount = room.gameState.malus[currentPlayerToken].refusedWords;
 
     if (refusedCount >= 2) {
-        rooms[roomCode].gameState.malus[currentPlayerToken].totalMalus += 10000;
+        room.gameState.malus[currentPlayerToken].totalMalus += 10000;
         let pseudo = players[currentPlayerToken]?.pseudo;
         console.log(`⚠️ Malus de 10s pour ${pseudo} (2 mots refusés)`);
     }
@@ -65,25 +61,22 @@ function applyMalusToActivePlayer(room, currentPlayerToken) {
 }
 
 function applyMalusToWrongNoVoters(room, currentPlayerToken) {
-    const roomCode = room;
-    console.log(roomCode);
-    console.log(rooms[roomCode]);
-    console.log(rooms[roomCode].gameState.playerOrder.length);
-    if (rooms[roomCode].gameState.playerOrder.length <= 2) {
+    console.log(room.gameState.playerOrder.length);
+    if (room.gameState.playerOrder.length <= 2) {
         return;
     }
 
-    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([token, vote]) => {
+    Object.entries(room.gameState.currentVote.votes).forEach(([token, vote]) => {
         if (token === currentPlayerToken) {
             return;
         }
 
         if (vote === false) {
-            rooms[roomCode].gameState.malus[token].wrongNoVotes++;
-            let wrongCount = rooms[roomCode].gameState.malus[token].wrongNoVotes;
+            room.gameState.malus[token].wrongNoVotes++;
+            let wrongCount = room.gameState.malus[token].wrongNoVotes;
 
             if (wrongCount >= 2) {
-                rooms[roomCode].gameState.malus[token].totalMalus += 15000;
+                room.gameState.malus[token].totalMalus += 15000;
                 let pseudo = players[token]?.pseudo;
                 console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "non" incorrects)`);
             }
@@ -93,21 +86,20 @@ function applyMalusToWrongNoVoters(room, currentPlayerToken) {
 }
 
 function applyMalusToWrongYesVoters(room, currentPlayerToken) {
-    const roomCode = room;
-    if (rooms[roomCode].gameState.playerOrder.length <= 2) {
+    if (room.gameState.playerOrder.length <= 2) {
         return;
     }
 
-    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([token, vote]) => {
+    Object.entries(room.gameState.currentVote.votes).forEach(([token, vote]) => {
         if (token === currentPlayerToken) {
             return;
         }
         if (vote === true) {
-            rooms[roomCode].gameState.malus[token].wrongYesVotes++;
-            let wrongCount = rooms[roomCode].gameState.malus[token].wrongYesVotes;
+            room.gameState.malus[token].wrongYesVotes++;
+            let wrongCount = room.gameState.malus[token].wrongYesVotes;
 
             if (wrongCount >= 2) {
-                rooms[roomCode].gameState.malus[token].totalMalus += 15000;
+                room.gameState.malus[token].totalMalus += 15000;
                 let pseudo = players[token]?.pseudo;
                 console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "oui" incorrects)`);
             }
@@ -412,8 +404,8 @@ export function validateOrNot(roomCode, playerToken, answer) {
         }
         else {
             console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
-            applyMalusToActivePlayer(roomCode, currentPlayerToken);
-            applyMalusToWrongYesVoters(roomCode, currentPlayerToken);
+            applyMalusToActivePlayer(room, currentPlayerToken);
+            applyMalusToWrongYesVoters(room, currentPlayerToken);
             replayTurn(roomCode);
         }
     }
