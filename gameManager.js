@@ -61,7 +61,6 @@ function applyMalusToActivePlayer(room, currentPlayerToken) {
 }
 
 function applyMalusToWrongNoVoters(room, currentPlayerToken) {
-    console.log(room.gameState.playerOrder.length);
     if (room.gameState.playerOrder.length <= 2) {
         return;
     }
