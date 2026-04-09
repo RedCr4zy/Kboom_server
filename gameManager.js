@@ -66,11 +66,14 @@ function applyMalusToActivePlayer(room, currentPlayerToken) {
 
 function applyMalusToWrongNoVoters(room, currentPlayerToken) {
     const roomCode = room;
+    console.log(roomCode);
+    console.log(rooms[roomCode]);
+    console.log(rooms[roomCode].gameState.playerOrder.length);
     if (rooms[roomCode].gameState.playerOrder.length <= 2) {
         return;
     }
 
-    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([vote, token]) => {
+    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([token, vote]) => {
         if (token === currentPlayerToken) {
             return;
         }
@@ -95,7 +98,7 @@ function applyMalusToWrongYesVoters(room, currentPlayerToken) {
         return;
     }
 
-    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([vote, token]) => {
+    Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([token, vote]) => {
         if (token === currentPlayerToken) {
             return;
         }
@@ -225,19 +228,17 @@ export function startGame(roomCode, maxRounds, timerDuration) {
 
     // Initialiser TOUS les timers AVANT la boucle
     room.gameState.playerOrder.forEach(token => {
-        room.gameState.playerOrder.forEach(token => {
-            const malusJoueur = room.gameState.malus[token]?.totalMalus || 0;
-            let tempsInitial = timerDuration - malusJoueur;
+        const malusJoueur = room.gameState.malus[token]?.totalMalus || 0;
+        let tempsInitial = timerDuration - malusJoueur;
 
-            if (tempsInitial < 0 ) tempsInitial = 0;
+        if (tempsInitial < 0 ) tempsInitial = 0;
 
-            room.gameState.playerTimers[token].totalTimeLeft = tempsInitial;
+        room.gameState.playerTimers[token].totalTimeLeft = tempsInitial;
 
-            if (malusJoueur > 0) {
-                const pseudo = players[token]?.pseudo;
-                console.log(`⚠️ ${pseudo} commence avec ${tempsInitial}ms (malus de ${malusJoueur}ms)`);
-            }
-        })
+        if (malusJoueur > 0) {
+            const pseudo = players[token]?.pseudo;
+            console.log(`⚠️ ${pseudo} commence avec ${tempsInitial}ms (malus de ${malusJoueur}ms)`);
+        }
     });
 
     // Démarrer le timer du joueur actif
