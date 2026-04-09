@@ -96,6 +96,9 @@ function applyMalusToWrongYesVoters(room, currentPlayerToken) {
     }
 
     Object.entries(rooms[roomCode].gameState.currentVote.votes).forEach(([vote, token]) => {
+        if (token === currentPlayerToken) {
+            return;
+        }
         if (vote === true) {
             rooms[roomCode].gameState.malus[token].wrongYesVotes++;
             let wrongCount = rooms[roomCode].gameState.malus[token].wrongYesVotes;
@@ -595,6 +598,8 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
         malus: room.gameState.malus[token]?.totalMalus || 0,
     }));
 
+    console.log(`Pseudo du joueur éliminé : ${eliminatedPlayerPseudo}` );
+
     room.players.forEach((p) => {
         const playerToken = Object.keys(players).find(t => players[t] === p);
 
@@ -607,8 +612,8 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
                     isCurrent: t === room.gameState.playerOrder[room.gameState.currentPlayerIndex],
                 })),
                 allTimers: allTimers,
-                playerToken: eliminatedPlayerToken,
-                playerPseudo: eliminatedPlayerPseudo,
+                eliminatedPlayerToken: eliminatedPlayerToken,
+                eliminatedPlayerPseudo: eliminatedPlayerPseudo,
                 message: `Le joueur ${eliminatedPlayerPseudo} a été éliminé. Raison : ${reason}`,
             }))
             console.log(`🔔 Notifié ${p.pseudo} de l'élimination de ${eliminatedPlayerPseudo}`);
