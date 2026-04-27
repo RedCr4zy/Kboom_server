@@ -505,7 +505,7 @@ export function replayTurn(roomCode) {
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
     const currentPlayer = players[currentPlayerToken];
 
-    room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp = Date.now();
+    room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp = Date.now() + 2500; // 2.5s de pause avant de relancer le timer
     room.gameState.playerTimers[currentPlayerToken].isPaused = false;
 
     room.players = room.players.filter(p => p.ws.readyState=== p.ws.OPEN);
