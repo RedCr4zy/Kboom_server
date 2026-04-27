@@ -449,7 +449,7 @@ export function nextTurn(roomCode) {
 
     console.log(`👤 Tour de : ${currentPlayer?.pseudo}`);
 
-    room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp = Date.now();
+    room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp = Date.now() + 2500; // 2.5s de pause avant de démarrer le timer
     room.gameState.playerTimers[currentPlayerToken].isPaused = false;
 
     // Filtrer les joueurs encore connectés
