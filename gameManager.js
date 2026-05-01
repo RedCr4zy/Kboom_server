@@ -363,6 +363,17 @@ export function validateOrNot(roomCode, playerToken, answer) {
     // Enregistrer le vote
     room.gameState.currentVote.votes[playerToken] = answer;
 
+    room.players.forEach(player => {
+        try {
+            player.ws.send(JSON.stringify({
+                type: 'voteUpdate',
+                votes: room.gameState.currentVote.votes,
+            }));
+        } catch(e) {
+            console.error('Erreur voteUpdate pour', player.pseudo, e.message);
+        }
+    })
+
     // Vérifier si tous les joueurs ont voté
     const totalPlayers = room.gameState.playerOrder.length;
     const totalVotes = Object.keys(room.gameState.currentVote.votes).length;
@@ -411,7 +422,20 @@ export function validateOrNot(roomCode, playerToken, answer) {
             console.log(`✅ La réponse est validée pour la room ${roomCode}`);
             room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
             applyMalusToWrongNoVoters(room, currentPlayerToken);
-            nextTurn(roomCode);
+            room.players.forEach(player => {
+                try {
+                    player.ws.send(JSON.stringify({
+                        type: 'voteFinished',
+                        votesPour: vote_pour,
+                        votesContre: vote_contre,
+                    }));
+                } catch (e) {
+                    console.error('Erreur send voteFinished pour', player.pseudo, e.message);
+                }
+            });
+            setTimeout(() => {
+                nextTurn(roomCode);
+            }, 3000);
         }
         else {
             console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
