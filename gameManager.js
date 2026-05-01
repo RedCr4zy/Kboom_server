@@ -430,7 +430,9 @@ export function validateOrNot(roomCode, playerToken, answer) {
             console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
             applyMalusToActivePlayer(room, currentPlayerToken);
             applyMalusToWrongYesVoters(room, currentPlayerToken);
-            replayTurn(roomCode);
+            setTimeout(() => {
+                replayTurn(roomCode);
+            }, 3500);
         }
     }
 }
