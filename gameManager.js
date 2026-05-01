@@ -424,7 +424,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
             applyMalusToWrongNoVoters(room, currentPlayerToken);
             setTimeout(() => {
                 nextTurn(roomCode);
-            }, 3000);
+            }, 3500);
         }
         else {
             console.log(`❌ La réponse est rejetée pour la room ${roomCode}`);
