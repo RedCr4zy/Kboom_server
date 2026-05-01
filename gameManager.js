@@ -389,6 +389,14 @@ export function validateOrNot(roomCode, playerToken, answer) {
 
         console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (Total : ${results})`);
 
+        room.players.forEach(player => {
+            players[player].ws.send(JSON.stringify({
+                type: 'voteResult',
+                votesPour: vote_pour,
+                votesContre: vote_contre
+            }));
+        });
+
         const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
         if (results === 0) {
