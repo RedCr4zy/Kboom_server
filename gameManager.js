@@ -36,7 +36,8 @@ function generateRoom() {
                 turnStartTimestamp: null,
                 isPaused: true,
                 isEliminated: false,*/
-            }
+            },
+            playerWhoAlreadyVote: [],
         }
     };
     console.log(`🔹 Room créée : ${roomCode}`);
@@ -325,6 +326,7 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
 
     // Reset votes
     room.gameState.currentVote.votes = {};
+    room.gameState.playerWhoAlreadyVote = [];
 
     // Créer allTimers
     const allTimers = Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
@@ -363,26 +365,51 @@ export function validateOrNot(roomCode, playerToken, answer) {
     // Enregistrer le vote
     room.gameState.currentVote.votes[playerToken] = answer;
 
-    room.players.forEach(player => {
+    if (!room.gameState.playerWhoAlreadyVote.includes(playerToken)) {
+        room.gameState.playerWhoAlreadyVote.push(playerToken);
+    }
+
+     // Calculer le score des joueurs
+        let vote_pour = 0;
+        let vote_contre = 0;
+
+        Object.values(room.gameState.currentVote.votes).forEach(vote => {
+            if (vote === true) {
+                vote_pour++;
+            }
+            else {
+                vote_contre++;
+            }
+        });
+
+        const results = vote_pour - vote_contre;
+
+
+    room.gameState.playerWhoAlreadyVote.forEach(player => {
         try {
-            player.ws.send(JSON.stringify({
-                type: 'voteUpdate',
+            players[player].ws.send(JSON.stringify({
+                type: 'voteResult',
                 votes: room.gameState.currentVote.votes,
+                votesPour: vote_pour,
+                votesContre: vote_contre,
+                totalVotes: Object.keys(room.gameState.currentVote.votes).length,
+                totalPlayers: room.gameState.playerOrder.length,
+                message: `Vote enregistré : ${results > 0 ? 'Pour' : results < 0 ? 'Contre' : 'Égalité'} (${vote_pour} pour, ${vote_contre} contre)`
             }));
         } catch(e) {
-            console.error('Erreur voteUpdate pour', player.pseudo, e.message);
+            console.error('Erreur voteResult pour', players[player].pseudo, e.message);
         }
-    })
+    });
 
     // Vérifier si tous les joueurs ont voté
     const totalPlayers = room.gameState.playerOrder.length;
     const totalVotes = Object.keys(room.gameState.currentVote.votes).length;
 
-    //if (totalVotes !== totalPlayers) {
-    //    return;
-    //}
+    if (totalVotes !== totalPlayers) {
+        return;
+    }
 
-    //if (totalVotes === totalPlayers) {
+    if (totalVotes === totalPlayers) {
         // Calculer le score des joueurs
         let vote_pour = 0;
         let vote_contre = 0;
@@ -436,7 +463,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
                 replayTurn(roomCode);
             }, 3500);
         }
-    //}
+    }
 }
 
 
