@@ -378,11 +378,11 @@ export function validateOrNot(roomCode, playerToken, answer) {
     const totalPlayers = room.gameState.playerOrder.length;
     const totalVotes = Object.keys(room.gameState.currentVote.votes).length;
 
-    if (totalVotes !== totalPlayers) {
-        return;
-    }
+    //if (totalVotes !== totalPlayers) {
+    //    return;
+    //}
 
-    if (totalVotes === totalPlayers) {
+    //if (totalVotes === totalPlayers) {
         // Calculer le score des joueurs
         let vote_pour = 0;
         let vote_contre = 0;
@@ -405,7 +405,9 @@ export function validateOrNot(roomCode, playerToken, answer) {
                 player.ws.send(JSON.stringify({
                     type: 'voteResult',
                     votesPour: vote_pour,
-                    votesContre: vote_contre
+                    votesContre: vote_contre,
+                    totalVotes: totalVotes,
+                    totalPlayers: totalPlayers,
                 }));
             } catch (e) {
                 console.error('Erreur send voteResult pour', players[player]?.pseudo, e.message);
@@ -434,7 +436,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
                 replayTurn(roomCode);
             }, 3500);
         }
-    }
+    //}
 }
 
 
