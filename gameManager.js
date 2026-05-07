@@ -388,7 +388,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
     room.gameState.playerWhoAlreadyVote.forEach(player => {
         try {
             players[player].ws.send(JSON.stringify({
-                type: 'voteResult',
+                type: 'voteUpdate',
                 votes: room.gameState.currentVote.votes,
                 votesPour: vote_pour,
                 votesContre: vote_contre,
