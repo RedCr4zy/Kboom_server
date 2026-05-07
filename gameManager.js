@@ -431,6 +431,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
             try {
                 player.ws.send(JSON.stringify({
                     type: 'voteResult',
+                    votes: room.gameState.currentVote.votes,
                     votesPour: vote_pour,
                     votesContre: vote_contre,
                     totalVotes: totalVotes,
