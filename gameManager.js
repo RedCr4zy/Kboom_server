@@ -22,6 +22,7 @@ function generateRoom() {
             currentRound: 0,
             currentPlayerIndex: 0, // Index du joueur dont c'est le tour
             currentLetter: null,
+            doesEliminatedPlayersCanVote: false,
             playerOrder: [], // Liste ordonnée des tokens des joueurs
             scores: {}, // token -> score
             currentVote: {
@@ -358,6 +359,13 @@ export function validateOrNot(roomCode, playerToken, answer) {
     if (!room || !room.gameState.isStarted) {
         console.log('❌ Room inexistante ou partie non démarrée');
         return;
+    }
+
+    if (room.gameState.doesEliminatedPlayersCanVote === false) {
+        if (!room.gameState.playerOrder.includes(playerToken)) {
+            console.log('Joueur éliminé ou non dans la partie.');
+            return;
+        }
     }
 
     console.log(`✅ Vote reçu pour la room ${roomCode} : ${players[playerToken]?.pseudo} a voté ${answer}`);
