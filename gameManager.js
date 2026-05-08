@@ -354,7 +354,7 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
     })
 }
 
-export function validateOrNot(roomCode, playerToken, answer) {
+export function validateOrNot(roomCode, playerToken, answer, ) {
     const room = rooms[roomCode];
     if (!room || !room.gameState.isStarted) {
         console.log('❌ Room inexistante ou partie non démarrée');

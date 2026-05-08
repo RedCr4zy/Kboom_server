@@ -234,6 +234,7 @@ export function initWebsocket(server) {
                     //const maxRounds = payload.maxRounds || 2;
                     const maxRounds = 99;
                     const timerDuration = payload.maxTime || 60000;
+                    const canEliminatedPlayersVote = payload.canEliminatedPlayersVote || false;
                     if (roomCode && roomCode != null) {
                         console.log('La partie :', roomCode, 'vient de commencer');
                         gameManager.startGame(roomCode, maxRounds, timerDuration);
