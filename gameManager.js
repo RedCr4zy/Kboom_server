@@ -22,7 +22,7 @@ function generateRoom() {
             currentRound: 0,
             currentPlayerIndex: 0, // Index du joueur dont c'est le tour
             currentLetter: null,
-            doesEliminatedPlayersCanVote: false,
+            canEliminatedPlayersVote: false,
             playerOrder: [], // Liste ordonnée des tokens des joueurs
             scores: {}, // token -> score
             currentVote: {
@@ -191,7 +191,7 @@ export function updateRoomPlayers(roomCode) {
 /**
  * Démarre la partie et notifie tous les joueurs
  */
-export function startGame(roomCode, maxRounds, timerDuration) {
+export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote) {
     const room = rooms[roomCode];
     if (!room) return;
 
@@ -202,7 +202,7 @@ export function startGame(roomCode, maxRounds, timerDuration) {
     room.gameState.currentLetter = chooseRandomLetter();
     room.gameState.maxRounds = maxRounds;
     room.gameState.timerConfig.duration = timerDuration;
-
+    room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
     // Filtrer les joueurs connectés
     room.players = room.players.filter(p => p.ws.readyState === p.ws.OPEN);
     
@@ -361,7 +361,7 @@ export function validateOrNot(roomCode, playerToken, answer, ) {
         return;
     }
 
-    if (room.gameState.doesEliminatedPlayersCanVote === false) {
+    if (room.gameState.canEliminatedPlayersVote === false) {
         if (!room.gameState.playerOrder.includes(playerToken)) {
             console.log('Joueur éliminé ou non dans la partie.');
             return;

@@ -237,7 +237,7 @@ export function initWebsocket(server) {
                     const canEliminatedPlayersVote = payload.canEliminatedPlayersVote || false;
                     if (roomCode && roomCode != null) {
                         console.log('La partie :', roomCode, 'vient de commencer');
-                        gameManager.startGame(roomCode, maxRounds, timerDuration);
+                        gameManager.startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote);
                     }
                     return;
                 }
