@@ -639,9 +639,15 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
     const removedIndex = room.gameState.playerOrder.indexOf(eliminatedPlayerToken);    
     room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== eliminatedPlayerToken);
 
-    if (removedIndex < room.gameState.currentPlayerIndex) {
-        room.gameState.currentPlayerIndex--;
+    if (removedIndex <= room.gameState.currentPlayerIndex) {
+        room.gameState.currentPlayerIndex--; 
+        // On recule l'index car le tableau a "glissé" vers la gauche
     }
+
+    if (room.gameState.currentPlayerIndex < 0) {
+        room.gameState.currentPlayerIndex = 0;
+    }
+
     if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
     }
@@ -678,8 +684,11 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
                 console.error('Erreur eliminatedPlayer pour', p.pseudo, e.message);
             }
         });
+        
     if (wasCurrentPlayer) {
-        nextTurn(roomCode);
+        setTimeout(() => {
+            nextTurn(roomCode);
+        }, 3000);
     }
     return;
 }
