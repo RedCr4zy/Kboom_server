@@ -21,12 +21,12 @@ function startHeartbeat() {
                 console.log('💀 Terminating dead socket');
 
                 //Clear le joueur
-                if(ws.playerToken && players[playerToken]) {
+                if(ws.playerToken && players[ws.playerToken]) {
                     const roomCode = players[ws.playerToken].currentRoom;
                     delete players[ws.playerToken];
 
                     if (roomCode && rooms[roomCode]) {
-                        updateRoomPlayers(roomCode);
+                        gameManager.updateRoomPlayers(roomCode);
                     }
                 }
 
