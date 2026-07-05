@@ -9,27 +9,15 @@ let heartbeatInterval = null;
 
 function startHeartbeat() {
     const INTERVAL_MS = 30000;
-    const TIMEOUT_MS = 5000;
 
     if (heartbeatInterval) clearInterval(heartbeatInterval);
 
     heartbeatInterval = setInterval(() => {
         if (!wss) return;
 
-        wss.clients.forEach(ws => { // ✅ CORRECTION : client → clients
+        wss.clients.forEach(ws => {
             if (ws.isAlive === false) {
                 console.log('💀 Terminating dead socket');
-
-                //Clear le joueur
-                if(ws.playerToken && players[playerToken]) {
-                    const roomCode = players[ws.playerToken].currentRoom;
-                    delete players[ws.playerToken];
-
-                    if (roomCode && rooms[roomCode]) {
-                        updateRoomPlayers(roomCode);
-                    }
-                }
-
                 try {ws.terminate();} catch (e) {}
                 return;
             }
@@ -58,38 +46,25 @@ export function initWebsocket(server) {
         ws.on('message', (msg) => {
             const raw = msg.toString();
 
-            let data;
-            try{
-                data = JSON.parse(raw);
+            let payload;
+            try {
+                payload = JSON.parse(raw);
             } catch (err) {
-                console.log('Message non-JSON reçu (texte brut):', raw);
-                if (ws.roomCode && rooms[ws.roomCode]) {
-                    broadcast(ws.roomCode, { type: 'message', text: raw });
-                } else {
-                    ws.send(JSON.stringify({
-                        type: 'erreur',
-                        message: 'Pas de room associé pour message texte.'
-                    }));
-                }
+                console.log('Message non-JSON reçu:', raw);
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    message: 'Payload JSON invalide.'
+                }));
                 return;
-            }
-
-            let payload = data;
-            if (data.text && typeof data.text === 'string' && data.text.trim().startsWith('{')) {
-                try {
-                    payload = JSON.parse(data.text);
-                } catch (e) {
-                    // ne fait rien
-                }
             }
 
             console.log('Nouveau message reçu : ', payload);
 
-            const effectiveType = payload.type || data.type;
+            const effectiveType = payload.type;
             if (!effectiveType || typeof effectiveType !== 'string') {
                 ws.send(JSON.stringify({
-                    type: 'erreur',
-                    message:'Payload JSON invalide (il manque le type).'
+                    type: 'error',
+                    message: 'Payload JSON invalide (il manque le type).'
                 }));
                 return;
             }
@@ -98,29 +73,97 @@ export function initWebsocket(server) {
                 case 'connection': {
                     const token = payload.token;
 
-                    // ✅ VALIDATION
+                    // VALIDATION
                     if (!token || typeof token !== 'string') {
                         ws.send(JSON.stringify({
-                            type: 'erreur',
+                            type: 'error',
                             message: 'Token invalide'
                         }));
                         return;
                     }
 
-                    // ✅ AJOUT : Stocker le token sur la websocket pour le heartbeat
+                    // Stocker le token sur la websocket pour le heartbeat
                     ws.playerToken = token;
+
+                    // Gérer la reconnexion sous période de grâce (15 secondes)
+                    if (players[token]) {
+                        console.log(`🔄 Reconnexion du joueur ${players[token].pseudo} avec le token:`, token);
+                        
+                        if (players[token].disconnectTimeout) {
+                            clearTimeout(players[token].disconnectTimeout);
+                            players[token].disconnectTimeout = null;
+                        }
+                        
+                        players[token].ws = ws;
+                        players[token].isOffline = false;
+
+                        // Envoyer la confirmation au client
+                        ws.send(JSON.stringify({
+                            type: 'connectionConfirmed',
+                            token: token,
+                            message: 'Connexion rétablie'
+                        }));
+
+                        const roomCode = players[token].currentRoom;
+                        if (roomCode && rooms[roomCode]) {
+                            const room = rooms[roomCode];
+                            
+                            // Envoyer l'état actuel de la partie au joueur qui se reconnecte
+                            if (room.gameState.isStarted) {
+                                const allTimers = Object.entries(room.gameState.playerTimers).map(([t, timerData]) => ({
+                                    token: t,
+                                    pseudo: players[t]?.pseudo,
+                                    totalTimeLeft: timerData.totalTimeLeft,
+                                    isPaused: timerData.isPaused,
+                                    isEliminated: timerData.isEliminated,
+                                    malus: room.gameState.malus[t]?.totalMalus || 0,
+                                    score: room.gameState.scores[t] || 0,
+                                }));
+
+                                const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
+                                const isCurrentPlayer = token === currentPlayerToken;
+
+                                ws.send(JSON.stringify({
+                                    type: 'gameStarted',
+                                    roomCode: roomCode,
+                                    letter: room.gameState.currentLetter,
+                                    round: room.gameState.currentRound,
+                                    isCurrentPlayer: isCurrentPlayer,
+                                    currentPlayerPseudo: players[currentPlayerToken]?.pseudo,
+                                    playerOrder: room.gameState.playerOrder.map(t => ({
+                                        token: t,
+                                        pseudo: players[t]?.pseudo
+                                    })),
+                                    maxRounds: room.gameState.maxRounds,
+                                    timeLeft: room.gameState.playerTimers[token].totalTimeLeft,
+                                    isTimerPaused: room.gameState.playerTimers[token].isPaused,
+                                    timerStartTimestamp: room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp,
+                                    allTimers: allTimers,
+                                    message: 'Reconnexion à la partie en cours',
+                                }));
+                            } else {
+                                ws.send(JSON.stringify({
+                                    type: 'redirection',
+                                    roomCode: roomCode,
+                                    isMaster: players[token].isMaster,
+                                }));
+                            }
+                            gameManager.updateRoomPlayers(roomCode);
+                        }
+                        return;
+                    }
 
                     players[token] = {
                         ws,
                         pseudo: null,
                         currentRoom: null,
-                        connectedAt: Date.now()
+                        connectedAt: Date.now(),
+                        isOffline: false,
+                        disconnectTimeout: null
                     };
 
                     console.log('✅ Nouveau joueur avec le token:', token);
 
-                    // ✅ AJOUT : Envoyer une confirmation de connexion au client
-                    // Sans ça, le client attend 5 secondes et timeout !
                     ws.send(JSON.stringify({
                         type: 'connectionConfirmed',
                         token: token,
@@ -142,13 +185,12 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'create_room': {
+                case 'createRoom': {
                     const { token, pseudo } = payload;
 
-                    // ✅ VALIDATION
                     if (!token || !pseudo) {
                         ws.send(JSON.stringify({
-                            type: 'erreur',
+                            type: 'error',
                             message: 'Token et pseudo requis'
                         }));
                         return;
@@ -156,7 +198,7 @@ export function initWebsocket(server) {
 
                     if (!players[token]) {
                         ws.send(JSON.stringify({
-                            type: 'erreur',
+                            type: 'error',
                             message: 'Joueur non trouvé'
                         }));
                         return;
@@ -169,8 +211,7 @@ export function initWebsocket(server) {
                     return;
                 }
 
-
-                case 'join_room': {
+                case 'joinRoom': {
                     const token = payload.token;
                     const pseudo = payload.pseudo;
                     const roomCode = payload.roomCode;
@@ -185,43 +226,26 @@ export function initWebsocket(server) {
                             message: 'Bienvenue ' + pseudo
                         }));
                     } catch (e) {}
-                    gameManager.addPlayerToRoom(roomCode, token, false); // ✅ AJOUT : false pour isMaster
+                    gameManager.addPlayerToRoom(roomCode, token, false);
                     return;
                 }
 
+                case 'leaveRoom': {
+                    const token = payload.token;
+                    const roomCode = payload.roomCode;
 
-                case 'leave_room': {
-                    const token = payload.token
-                    const roomCode = payload.roomCode
-
-                    if(!players[token]) {
+                    if (!players[token]) {
                         ws.send(JSON.stringify({
-                            type: 'erreur',
+                            type: 'error',
                             message: 'Joueur non trouvé',
                         }));
                         return;
                     }
 
-                    if (rooms[roomCode]) {
-                        //Retirer le joueur de la room
-                        rooms[roomCode].players = rooms[roomCode].players.filter(
-                            p => p !== players[token]
-                        );
+                    gameManager.removePlayerFromRoom(token);
 
-                        players[token].currentRoom = null;
-
-                        //Notifier les autres
-                        gameManager.updateRoomPlayers(roomCode);
-
-                        //Si la room est vide, la supprimer
-                        if (rooms[roomCode].players.length === 0) {
-                            delete rooms[roomCode];
-                            console.log(`Room ${roomCode} supprimée (vide)`)
-                        }
-                    }
-
-                    players[token].ws.send(JSON.stringify({
-                        type: 'left_room',
+                    ws.send(JSON.stringify({
+                        type: 'leftRoom',
                         roomCode: roomCode,
                         message: 'Vous avez bien quitté la room',
                     }));
@@ -229,9 +253,8 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'start_game': {
+                case 'startGame': {
                     const roomCode = payload.roomCode;
-                    //const maxRounds = payload.maxRounds || 2;
                     const maxRounds = 99;
                     const timerDuration = payload.maxTime || 60000;
                     const canEliminatedPlayersVote = payload.canEliminatedPlayersVote || false;
@@ -242,7 +265,17 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'next_player': {
+                case 'replayGame': {
+                    const token = payload.token;
+                    const roomCode = payload.roomCode;
+                    if (rooms[roomCode] && players[token] && players[token].isMaster) {
+                        console.log(`🔄 Recommencer la partie demandé pour la room : ${roomCode}`);
+                        gameManager.resetGame(roomCode);
+                    }
+                    return;
+                }
+
+                case 'nextPlayer': {
                     const roomCode = payload.roomCode;
                     if (roomCode && roomCode != null) {
                         console.log('Passage au joueur suivant dans la partie :', roomCode);
@@ -251,7 +284,7 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'send_answer': {
+                case 'sendAnswer': {
                     console.log('Validation de la réponse reçue :', payload);
                     const roomCode = payload.roomCode;
                     const timeRemaining = payload.timeRemaining;
@@ -263,7 +296,7 @@ export function initWebsocket(server) {
                     return;
                 }
 
-                case 'validate_or_not': {
+                case 'validateOrNot': {
                     console.log('Réponse reçue :', payload);
                     const roomCode = payload.roomCode;
                     const token = payload.token;
@@ -286,30 +319,42 @@ export function initWebsocket(server) {
             }
         });
 
-        // ✅ AJOUT : Gestionnaire d'erreur
+        // Gestion de la perte de connexion (Période de grâce de 15 secondes)
+        const handleCloseOrError = () => {
+            if (ws.playerToken && players[ws.playerToken]) {
+                const token = ws.playerToken;
+                const player = players[token];
+                
+                console.log(`🔌 Connexion perdue pour ${player.pseudo || token}. Période de grâce de 15s.`);
+                
+                player.isOffline = true;
+                player.ws = null;
+
+                if (player.currentRoom) {
+                    gameManager.updateRoomPlayers(player.currentRoom);
+                }
+
+                if (player.disconnectTimeout) clearTimeout(player.disconnectTimeout);
+                player.disconnectTimeout = setTimeout(() => {
+                    if (players[token] && players[token].isOffline) {
+                        console.log(`💀 Période de grâce expirée pour ${player.pseudo || token}. Suppression définitive.`);
+                        gameManager.removePlayerFromRoom(token);
+                        delete players[token];
+                    }
+                }, 15000);
+            }
+        };
+
+        // Gestionnaire d'erreur
         ws.on('error', (error) => {
             console.error('❌ Erreur WebSocket:', error.message);
-            if (ws.playerToken && players[ws.playerToken]) {
-                const roomCode = players[ws.playerToken].currentRoom;
-                delete players[ws.playerToken];
-
-                if (roomCode && rooms[roomCode]) {
-                    gameManager.updateRoomPlayers(roomCode);
-                }
-            }
+            handleCloseOrError();
         });
 
-        // ✅ AJOUT : Gestionnaire de fermeture
+        // Gestionnaire de fermeture
         ws.on('close', () => {
             console.log('🔌 Connexion fermée');
-            if (ws.playerToken && players[ws.playerToken]) {
-                const roomCode = players[ws.playerToken].currentRoom;
-                delete players[ws.playerToken];
-
-                if (roomCode && rooms[roomCode]) {
-                    gameManager.updateRoomPlayers(roomCode);
-                }
-            }
+            handleCloseOrError();
         });
 
     });
