@@ -184,7 +184,10 @@ export function updateRoomPlayers(roomCode) {
                 player.ws.send(JSON.stringify({
                     type: 'updatePlayers',
                     players: playerList,
-                    roomCode: roomCode
+                    roomCode: roomCode,
+                    maxRounds: room.gameState.maxRounds,
+                    maxTime: room.gameState.timerConfig.duration,
+                    canEliminatedPlayersVote: room.gameState.canEliminatedPlayersVote
                 }));
             } catch(e) {
                 console.error('Erreur updateRoomPlayers pour', player.pseudo, e.message);

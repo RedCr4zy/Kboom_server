@@ -186,7 +186,7 @@ export function initWebsocket(server) {
                 }
 
                 case 'createRoom': {
-                    const { token, pseudo } = payload;
+                    const { token, pseudo, maxRounds, maxTime, canEliminatedPlayersVote } = payload;
 
                     if (!token || !pseudo) {
                         ws.send(JSON.stringify({
@@ -207,7 +207,29 @@ export function initWebsocket(server) {
                     console.log('Création de room demandée par le joueur avec le token:', token);
 
                     players[token].pseudo = pseudo;
-                    gameManager.createGame(token);
+                    const roomCode = gameManager.createGame(token);
+                    
+                    const room = rooms[roomCode];
+                    if (room) {
+                        if (maxRounds !== undefined) room.gameState.maxRounds = maxRounds;
+                        if (maxTime !== undefined) room.gameState.timerConfig.duration = maxTime;
+                        if (canEliminatedPlayersVote !== undefined) room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
+                        
+                        gameManager.updateRoomPlayers(roomCode);
+                    }
+                    return;
+                }
+
+                case 'updateRoomConfig': {
+                    const { roomCode, maxRounds, maxTime, canEliminatedPlayersVote } = payload;
+                    const room = rooms[roomCode];
+                    if (room) {
+                        if (maxRounds !== undefined) room.gameState.maxRounds = maxRounds;
+                        if (maxTime !== undefined) room.gameState.timerConfig.duration = maxTime;
+                        if (canEliminatedPlayersVote !== undefined) room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
+                        
+                        gameManager.updateRoomPlayers(roomCode);
+                    }
                     return;
                 }
 
