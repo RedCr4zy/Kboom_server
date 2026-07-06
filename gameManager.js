@@ -717,6 +717,19 @@ export function finishGame(roomCode) {
             const isWinner = winners.includes(token);
             const malusSec = Math.floor((room.gameState.malus[token]?.totalMalus || 0) / 1000);
             incrementUserStats(player.pseudo, isWinner, malusSec);
+
+            if (player.userId) {
+                const authUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4000';
+                fetch(`${authUrl}/api/update-stats`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: player.userId,
+                        win: isWinner,
+                        malusSec: malusSec
+                    })
+                }).catch(err => console.error("⚠️ Failed to update central stats:", err.message));
+            }
         }
     });
 

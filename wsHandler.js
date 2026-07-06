@@ -43,7 +43,7 @@ export function initWebsocket(server) {
             ws.isAlive = true;
         });
 
-        ws.on('message', (msg) => {
+        ws.on('message', async (msg) => {
             const raw = msg.toString();
 
             let payload;
@@ -85,9 +85,36 @@ export function initWebsocket(server) {
                     // Stocker le token sur la websocket pour le heartbeat
                     ws.playerToken = token;
 
+                    // Verify token with Central Auth Service
+                    let verifiedUser = null;
+                    try {
+                        const authUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4000';
+                        const res = await fetch(`${authUrl}/api/verify-token`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token })
+                        });
+                        if (res.ok) {
+                            verifiedUser = await res.json();
+                        }
+                    } catch (e) {
+                        console.error("⚠️ Central Auth verification failed:", e.message);
+                    }
+
+                    if (!verifiedUser) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Échec de l\'authentification centrale.'
+                        }));
+                        ws.close(4003, "Non authentifié");
+                        return;
+                    }
+
+                    const pseudo = verifiedUser.pseudo;
+
                     // Gérer la reconnexion sous période de grâce (15 secondes)
                     if (players[token]) {
-                        console.log(`🔄 Reconnexion du joueur ${players[token].pseudo} avec le token:`, token);
+                        console.log(`🔄 Reconnexion du joueur ${pseudo} avec le token:`, token);
                         
                         if (players[token].disconnectTimeout) {
                             clearTimeout(players[token].disconnectTimeout);
@@ -155,11 +182,13 @@ export function initWebsocket(server) {
 
                     players[token] = {
                         ws,
-                        pseudo: null,
+                        pseudo: pseudo,
                         currentRoom: null,
                         connectedAt: Date.now(),
                         isOffline: false,
-                        disconnectTimeout: null
+                        disconnectTimeout: null,
+                        userId: verifiedUser.id,
+                        isPremium: verifiedUser.isPremium
                     };
 
                     console.log('✅ Nouveau joueur avec le token:', token);
@@ -167,7 +196,9 @@ export function initWebsocket(server) {
                     ws.send(JSON.stringify({
                         type: 'connectionConfirmed',
                         token: token,
-                        message: 'Connexion établie avec succès'
+                        message: 'Connexion établie avec succès',
+                        pseudo: pseudo,
+                        isPremium: verifiedUser.isPremium
                     }));
 
                     return;
