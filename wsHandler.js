@@ -186,7 +186,7 @@ export function initWebsocket(server) {
                 }
 
                 case 'createRoom': {
-                    const { token, pseudo, maxRounds, maxTime, canEliminatedPlayersVote } = payload;
+                    const { token, pseudo, maxRounds, maxTime, canEliminatedPlayersVote, randomizeOrder } = payload;
 
                     if (!token || !pseudo) {
                         ws.send(JSON.stringify({
@@ -214,6 +214,7 @@ export function initWebsocket(server) {
                         if (maxRounds !== undefined) room.gameState.maxRounds = maxRounds;
                         if (maxTime !== undefined) room.gameState.timerConfig.duration = maxTime;
                         if (canEliminatedPlayersVote !== undefined) room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
+                        if (randomizeOrder !== undefined) room.gameState.randomizeOrder = randomizeOrder;
                         
                         gameManager.updateRoomPlayers(roomCode);
                     }
@@ -221,12 +222,13 @@ export function initWebsocket(server) {
                 }
 
                 case 'updateRoomConfig': {
-                    const { roomCode, maxRounds, maxTime, canEliminatedPlayersVote } = payload;
+                    const { roomCode, maxRounds, maxTime, canEliminatedPlayersVote, randomizeOrder } = payload;
                     const room = rooms[roomCode];
                     if (room) {
                         if (maxRounds !== undefined) room.gameState.maxRounds = maxRounds;
                         if (maxTime !== undefined) room.gameState.timerConfig.duration = maxTime;
                         if (canEliminatedPlayersVote !== undefined) room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
+                        if (randomizeOrder !== undefined) room.gameState.randomizeOrder = randomizeOrder;
                         
                         gameManager.updateRoomPlayers(roomCode);
                     }
@@ -277,12 +279,13 @@ export function initWebsocket(server) {
 
                 case 'startGame': {
                     const roomCode = payload.roomCode;
-                    const maxRounds = 99;
+                    const maxRounds = payload.maxRounds || 99;
                     const timerDuration = payload.maxTime || 60000;
                     const canEliminatedPlayersVote = payload.canEliminatedPlayersVote || false;
+                    const randomizeOrder = payload.randomizeOrder || false;
                     if (roomCode && roomCode != null) {
                         console.log('La partie :', roomCode, 'vient de commencer');
-                        gameManager.startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote);
+                        gameManager.startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote, randomizeOrder);
                     }
                     return;
                 }
@@ -336,6 +339,29 @@ export function initWebsocket(server) {
                     const token = payload.token;
 
                     gameManager.eliminatePlayer(roomCode, token, 'timeout');
+                    return;
+                }
+
+                case 'getSuggestedConfig': {
+                    const playerCount = payload.playerCount || 4;
+                    const config = gameManager.getSuggestedConfig(playerCount);
+                    ws.send(JSON.stringify({
+                        type: 'suggestedConfig',
+                        maxRounds: config.maxRounds,
+                        maxTime: config.maxTime,
+                        canEliminatedPlayersVote: config.canEliminatedPlayersVote,
+                        randomizeOrder: config.randomizeOrder,
+                    }));
+                    return;
+                }
+
+                case 'submitFeedback': {
+                    const roomCode = payload.roomCode;
+                    const rating = payload.rating;
+                    const top = payload.top;
+                    const flop = payload.flop;
+
+                    gameManager.recordFeedback(roomCode, rating, top, flop);
                     return;
                 }
             }

@@ -1,5 +1,7 @@
 import { players, rooms } from './rooms.js';
 import { incrementUserStats } from './database.js';
+import fs from 'fs';
+import path from 'path';
 
 const possibleLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'I', 'M', 'P', 'R', 'S', 'T',];
 
@@ -42,7 +44,20 @@ function generateRoom() {
 // =======================
 // MALUS LOGIC & BROADCAST
 // =======================
-function broadcastMalus(room, pseudo, seconds, reason) {
+function broadcastMalus(room, token, seconds, reason) {
+    const playerTimer = room.gameState.playerTimers[token];
+    let isNowEliminated = false;
+    if (playerTimer) {
+        playerTimer.totalTimeLeft -= (seconds * 1000);
+        if (playerTimer.totalTimeLeft <= 0) {
+            playerTimer.totalTimeLeft = 0;
+            isNowEliminated = true;
+        }
+    }
+
+    const pseudo = players[token]?.pseudo || 'Inconnu';
+    const allTimers = createAllTimersList(room);
+
     room.players.forEach(player => {
         if (player.ws && player.ws.readyState === player.ws.OPEN) {
             try {
@@ -51,10 +66,18 @@ function broadcastMalus(room, pseudo, seconds, reason) {
                     pseudo: pseudo,
                     seconds: seconds,
                     reason: reason,
+                    allTimers: allTimers,
                 }));
             } catch(e) {}
         }
     });
+
+    if (isNowEliminated) {
+        const roomCode = Object.keys(rooms).find(code => rooms[code] === room);
+        if (roomCode) {
+            eliminatePlayer(roomCode, token, "Temps écoulé (Malus)");
+        }
+    }
 }
 
 function applyMalusToActivePlayer(room, currentPlayerToken) {
@@ -68,9 +91,8 @@ function applyMalusToActivePlayer(room, currentPlayerToken) {
 
     if (refusedCount >= 2) {
         room.gameState.malus[currentPlayerToken].totalMalus += 10000;
-        let pseudo = players[currentPlayerToken]?.pseudo;
-        console.log(`⚠️ Malus de 10s pour ${pseudo} (2 mots refusés)`);
-        broadcastMalus(room, pseudo, 10, "2 mots refusés");
+        console.log(`⚠️ Malus de 10s pour ${players[currentPlayerToken]?.pseudo} (2 mots refusés)`);
+        broadcastMalus(room, currentPlayerToken, 10, "2 mots refusés");
     }
     return;
 }
@@ -91,9 +113,8 @@ function applyMalusToWrongNoVoters(room, currentPlayerToken) {
 
             if (wrongCount >= 2) {
                 room.gameState.malus[token].totalMalus += 15000;
-                let pseudo = players[token]?.pseudo;
-                console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "non" incorrects)`);
-                broadcastMalus(room, pseudo, 15, '2 votes "non" incorrects');
+                console.log(`⚠️ Malus de 15s pour ${players[token]?.pseudo} (2 votes "non" incorrects)`);
+                broadcastMalus(room, token, 15, '2 votes "non" incorrects');
             }
         }
     });
@@ -115,9 +136,8 @@ function applyMalusToWrongYesVoters(room, currentPlayerToken) {
 
             if (wrongCount >= 2) {
                 room.gameState.malus[token].totalMalus += 15000;
-                let pseudo = players[token]?.pseudo;
-                console.log(`⚠️ Malus de 15s pour ${pseudo} (2 votes "oui" incorrects)`);
-                broadcastMalus(room, pseudo, 15, '2 votes "oui" incorrects');
+                console.log(`⚠️ Malus de 15s pour ${players[token]?.pseudo} (2 votes "oui" incorrects)`);
+                broadcastMalus(room, token, 15, '2 votes "oui" incorrects');
             }
         }
     });
@@ -187,7 +207,8 @@ export function updateRoomPlayers(roomCode) {
                     roomCode: roomCode,
                     maxRounds: room.gameState.maxRounds,
                     maxTime: room.gameState.timerConfig.duration,
-                    canEliminatedPlayersVote: room.gameState.canEliminatedPlayersVote
+                    canEliminatedPlayersVote: room.gameState.canEliminatedPlayersVote,
+                    randomizeOrder: room.gameState.randomizeOrder
                 }));
             } catch(e) {
                 console.error('Erreur updateRoomPlayers pour', player.pseudo, e.message);
@@ -202,21 +223,24 @@ export function updateRoomPlayers(roomCode) {
 // HELPERS FOR TIMERS LIST
 // =======================
 function createAllTimersList(room) {
-    return Object.entries(room.gameState.playerTimers).map(([token, timerData]) => ({
-        token: token,
-        pseudo: players[token]?.pseudo,
-        totalTimeLeft: timerData.totalTimeLeft,
-        isPaused: timerData.isPaused,
-        isEliminated: timerData.isEliminated,
-        malus: room.gameState.malus[token]?.totalMalus || 0,
-        score: room.gameState.scores[token] || 0,
-    }));
+    return room.gameState.playerOrder.map(token => {
+        const timerData = room.gameState.playerTimers[token];
+        return {
+            token: token,
+            pseudo: players[token]?.pseudo,
+            totalTimeLeft: timerData ? timerData.totalTimeLeft : 0,
+            isPaused: timerData ? timerData.isPaused : true,
+            isEliminated: timerData ? timerData.isEliminated : false,
+            malus: room.gameState.malus[token]?.totalMalus || 0,
+            score: room.gameState.scores[token] || 0,
+        };
+    });
 }
 
 // =======================
 // GAME FLOW METHODS
 // =======================
-export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote) {
+export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote, randomizeOrder = false) {
     const room = rooms[roomCode];
     if (!room) return;
 
@@ -227,11 +251,20 @@ export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlaye
     room.gameState.maxRounds = maxRounds;
     room.gameState.timerConfig.duration = timerDuration;
     room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
+    room.gameState.randomizeOrder = randomizeOrder;
     
     room.gameState.playerOrder = room.gameState.playerOrder.filter(token => {
         const player = players[token];
         return player && room.players.includes(player);
     });
+
+    if (randomizeOrder) {
+        // Mélange Fisher-Yates
+        for (let i = room.gameState.playerOrder.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [room.gameState.playerOrder[i], room.gameState.playerOrder[j]] = [room.gameState.playerOrder[j], room.gameState.playerOrder[i]];
+        }
+    }
 
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
@@ -649,6 +682,8 @@ export function finishGame(roomCode) {
         return;
     }
 
+    room.gameState.endedPlayerCount = room.players.length;
+
     const statsByPlayer = {};
     room.gameState.playerOrder.forEach(token => {
         const player = players[token];
@@ -826,4 +861,90 @@ export function getGameState(roomCode) {
             score: room.gameState.scores[t] || 0
         })),
     };
+}
+
+// =====================================================
+// AI SUGGESTED CONFIG & Q-LEARNING FEEDBACK
+// =====================================================
+
+const weightsPath = path.join(process.cwd(), 'ai_weights.json');
+
+const defaultWeights = {
+    "2": { maxRounds: 5, maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true },
+    "3": { maxRounds: 5, maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true },
+    "4": { maxRounds: 6, maxTime: 60000, canEliminatedPlayersVote: false, randomizeOrder: true },
+    "5": { maxRounds: 6, maxTime: 60000, canEliminatedPlayersVote: true, randomizeOrder: true },
+    "6": { maxRounds: 7, maxTime: 75000, canEliminatedPlayersVote: true, randomizeOrder: true },
+    "7": { maxRounds: 7, maxTime: 75000, canEliminatedPlayersVote: true, randomizeOrder: true },
+    "8": { maxRounds: 8, maxTime: 90000, canEliminatedPlayersVote: true, randomizeOrder: true }
+};
+
+let aiWeights = { ...defaultWeights };
+
+try {
+    if (fs.existsSync(weightsPath)) {
+        const data = fs.readFileSync(weightsPath, 'utf8');
+        aiWeights = JSON.parse(data);
+        console.log("🤖 AI Weights loaded successfully from ai_weights.json");
+    } else {
+        fs.writeFileSync(weightsPath, JSON.stringify(defaultWeights, null, 2), 'utf8');
+        console.log("🤖 Created default ai_weights.json");
+    }
+} catch (e) {
+    console.error("⚠️ Failed to load AI weights, using defaults:", e.message);
+}
+
+function saveWeights() {
+    try {
+        fs.writeFileSync(weightsPath, JSON.stringify(aiWeights, null, 2), 'utf8');
+    } catch (e) {
+        console.error("⚠️ Failed to save AI weights:", e.message);
+    }
+}
+
+export function getSuggestedConfig(playerCount) {
+    const key = playerCount.toString();
+    if (aiWeights[key]) {
+        return aiWeights[key];
+    }
+    
+    if (playerCount <= 1) {
+        return { maxRounds: 5, maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true };
+    }
+    return { maxRounds: 8, maxTime: 90000, canEliminatedPlayersVote: true, randomizeOrder: true };
+}
+
+export function recordFeedback(roomCode, rating, top, flop) {
+    const room = rooms[roomCode];
+    if (!room) return;
+
+    const playerCount = room.gameState.endedPlayerCount || room.players.length;
+    updateAIWeights(playerCount, rating, top, flop);
+}
+
+export function updateAIWeights(playerCount, rating, top, flop) {
+    const key = playerCount.toString();
+    if (!aiWeights[key]) {
+        aiWeights[key] = { maxRounds: 6, maxTime: 60000, canEliminatedPlayersVote: false, randomizeOrder: true };
+    }
+
+    const config = aiWeights[key];
+
+    // Q-Learning / Feedback adaptation logic
+    if (rating < 4 || flop) {
+        if (flop === "Partie trop longue") {
+            if (config.maxRounds > 3) config.maxRounds -= 1;
+            if (config.maxTime > 15000) config.maxTime -= 5000;
+        } else if (flop === "Partie trop courte") {
+            if (config.maxRounds < 15) config.maxRounds += 1;
+            if (config.maxTime < 120000) config.maxTime += 5000;
+        } else if (flop === "Pas assez de temps pour répondre") {
+            if (config.maxTime < 120000) config.maxTime += 10000;
+        } else if (flop === "Malus trop sévères") {
+            if (config.maxTime < 120000) config.maxTime += 5000;
+        }
+    }
+
+    console.log(`🤖 AI updated suggested config for ${playerCount} players:`, config);
+    saveWeights();
 }
