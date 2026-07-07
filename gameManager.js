@@ -1,5 +1,4 @@
 import { players, rooms } from './rooms.js';
-import { incrementUserStats } from './database.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -713,23 +712,19 @@ export function finishGame(roomCode) {
     // Enregistrer les statistiques persistantes des joueurs en base de données local
     room.gameState.playerOrder.forEach(token => {
         const player = players[token];
-        if (player && player.pseudo) {
+        if (player && player.userId) {
             const isWinner = winners.includes(token);
             const malusSec = Math.floor((room.gameState.malus[token]?.totalMalus || 0) / 1000);
-            incrementUserStats(player.pseudo, isWinner, malusSec);
-
-            if (player.userId) {
-                const authUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4000';
-                fetch(`${authUrl}/api/update-stats`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: player.userId,
-                        win: isWinner,
-                        malusSec: malusSec
-                    })
-                }).catch(err => console.error("⚠️ Failed to update central stats:", err.message));
-            }
+            const authUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4000';
+            fetch(`${authUrl}/api/update-stats`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: player.userId,
+                    win: isWinner,
+                    malusSec: malusSec
+                })
+            }).catch(err => console.error("⚠️ Failed to update central stats:", err.message));
         }
     });
 
