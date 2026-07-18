@@ -73,6 +73,7 @@ export function initWebsocket(server) {
             switch (effectiveType) {
                 case 'connection': {
                     const token = payload.token;
+                    console.log('[GAME-WS] Connexion demande reçue', { tokenPreview: token?.slice(0, 40) });
 
                     // VALIDATION
                     if (!token || typeof token !== 'string') {
@@ -90,10 +91,13 @@ export function initWebsocket(server) {
                     let verifiedUser = null;
 
                     if (isJwt) {
+                        console.log('[GAME-WS] Vérification JWT demandée');
                         verifiedUser = await verifyToken(token);
 
                         if (!verifiedUser) {
-                            console.warn('⚠️ Vérification centrale indisponible, connexion continuée en mode invité');
+                            console.warn('[GAME-WS] Vérification centrale indisponible ou échouée, connexion continuée en mode invité');
+                        } else {
+                            console.log('[GAME-WS] Vérification centrale OK', { pseudo: verifiedUser.pseudo, id: verifiedUser.id });
                         }
                     }
 
@@ -179,6 +183,7 @@ export function initWebsocket(server) {
                     };
 
                     console.log('✅ Nouveau joueur avec le token:', token);
+                    console.log('[GAME-WS] Joueur enregistré', { tokenPreview: token?.slice(0, 40), pseudo, userId: verifiedUser ? verifiedUser.id : null });
 
                     ws.send(JSON.stringify({
                         type: 'connectionConfirmed',
