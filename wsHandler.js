@@ -3,6 +3,7 @@ import {v4 as uuidv4} from 'uuid';
 
 import {players, rooms} from './rooms.js'
 import * as gameManager from './gameManager.js'
+import { verifyToken } from './authService.js'
 
 let wss = null;
 let heartbeatInterval = null;
@@ -89,20 +90,7 @@ export function initWebsocket(server) {
                     let verifiedUser = null;
 
                     if (isJwt) {
-                        // Verify token with Central Auth Service
-                        try {
-                            const authUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4000';
-                            const res = await fetch(`${authUrl}/api/verify-token`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ token })
-                            });
-                            if (res.ok) {
-                                verifiedUser = await res.json();
-                            }
-                        } catch (e) {
-                            console.error("⚠️ Central Auth verification failed:", e.message);
-                        }
+                        verifiedUser = await verifyToken(token);
 
                         if (!verifiedUser) {
                             ws.send(JSON.stringify({

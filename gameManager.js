@@ -1,6 +1,7 @@
 import { players, rooms } from './rooms.js';
 import fs from 'fs';
 import path from 'path';
+import { updateStats } from './authService.js';
 
 const possibleLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'I', 'M', 'P', 'R', 'S', 'T',];
 
@@ -715,16 +716,7 @@ export function finishGame(roomCode) {
         if (player && player.userId) {
             const isWinner = winners.includes(token);
             const malusSec = Math.floor((room.gameState.malus[token]?.totalMalus || 0) / 1000);
-            const authUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4000';
-            fetch(`${authUrl}/api/update-stats`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: player.userId,
-                    win: isWinner,
-                    malusSec: malusSec
-                })
-            }).catch(err => console.error("⚠️ Failed to update central stats:", err.message));
+            updateStats(player.userId, isWinner, malusSec).catch(() => {});
         }
     });
 
@@ -756,6 +748,13 @@ export function resetGame(roomCode) {
     room.gameState.currentPlayerIndex = 0;
     room.gameState.currentLetter = null;
     room.gameState.playerWhoAlreadyVote = [];
+
+    // Reconstruire playerOrder avec tous les joueurs de la room
+    const allTokens = room.players.map(player => {
+        return Object.keys(players).find(t => players[t] === player);
+    }).filter(t => t !== undefined);
+
+    room.gameState.playerOrder = allTokens;
 
     room.gameState.playerOrder.forEach(token => {
         room.gameState.scores[token] = 0;
