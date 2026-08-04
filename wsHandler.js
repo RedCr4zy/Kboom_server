@@ -1,434 +1,223 @@
-import WebSocket, {WebSocketServer} from 'ws';
-import {v4 as uuidv4} from 'uuid';
+import WebSocket, { WebSocketServer } from 'ws';
 
-import {players, rooms} from './rooms.js'
-import * as gameManager from './gameManager.js'
-import { verifyToken } from './authService.js'
+import { players, rooms } from './rooms.js';
+import * as gameManager from './gameManager.js';
+import { verifyToken } from './authService.js';
 
 let wss = null;
 let heartbeatInterval = null;
+const MAX_MESSAGE_SIZE = 16 * 1024;
+const GUEST_TOKEN = /^guest_[a-f0-9]{32,128}$/i;
+
+function send(ws, type, message, extra = {}) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type, message, ...extra }));
+}
+
+function isMaster(token, roomCode) {
+  return players[token]?.currentRoom === roomCode && players[token]?.isMaster === true;
+}
+
+function isRoomMember(token, roomCode) {
+  return Boolean(roomCode && players[token]?.currentRoom === roomCode && rooms[roomCode]);
+}
+
+function safePseudo(value) {
+  return typeof value === 'string' && value.trim().length >= 2 && value.trim().length <= 24
+    ? value.trim()
+    : null;
+}
 
 function startHeartbeat() {
-    const INTERVAL_MS = 30000;
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  heartbeatInterval = setInterval(() => {
+    wss?.clients.forEach((ws) => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+}
 
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
+async function authenticate(ws, token) {
+  if (typeof token !== 'string' || token.length > 4096) return null;
 
-    heartbeatInterval = setInterval(() => {
-        if (!wss) return;
+  if (token.includes('.')) {
+    const user = await verifyToken(token);
+    if (!user?.id || !safePseudo(user.pseudo)) return null;
+    return { token, pseudo: user.pseudo, userId: user.id, isPremium: user.isPremium === true };
+  }
 
-        wss.clients.forEach(ws => {
-            if (ws.isAlive === false) {
-                console.log('💀 Terminating dead socket');
-                try {ws.terminate();} catch (e) {}
-                return;
-            }
-
-            ws.isAlive = false;
-            try {
-                ws.ping();
-            } catch (e) {
-                console.error('Erreur ping : ', e.message);
-            }
-        });
-    }, INTERVAL_MS);
+  if (!GUEST_TOKEN.test(token)) return null;
+  return { token, pseudo: null, userId: null, isPremium: false };
 }
 
 export function initWebsocket(server) {
-    wss = new WebSocketServer({server});
+  wss = new WebSocketServer({ server, maxPayload: MAX_MESSAGE_SIZE });
 
-    wss.on('connection', (ws) => {
-        console.log('✅ Nouvelle connexion WebSocket');
-        ws.isAlive = true;
+  wss.on('connection', (ws) => {
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
 
-        ws.on('pong', () => {
-            ws.isAlive = true;
-        });
+    ws.on('message', async (message) => {
+      if (message.length > MAX_MESSAGE_SIZE) return ws.close(1009, 'Message trop volumineux');
 
-        ws.on('message', async (msg) => {
-            const raw = msg.toString();
+      let payload;
+      try { payload = JSON.parse(message.toString()); } catch { return send(ws, 'error', 'Payload JSON invalide.'); }
+      if (!payload || typeof payload.type !== 'string') return send(ws, 'error', 'Type de message invalide.');
 
-            let payload;
-            try {
-                payload = JSON.parse(raw);
-            } catch (err) {
-                console.log('Message non-JSON reçu:', raw);
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: 'Payload JSON invalide.'
-                }));
-                return;
-            }
+      if (payload.type === 'connection') {
+        if (ws.playerToken) return send(ws, 'error', 'Socket déjà authentifiée.');
+        const identity = await authenticate(ws, payload.token);
+        if (!identity) return send(ws, 'error', 'Jeton invalide ou expiré.');
 
-            console.log('Nouveau message reçu : ', payload);
+        const previous = players[identity.token];
+        if (previous && !previous.isOffline) return send(ws, 'error', 'Cette session est déjà active.');
 
-            const effectiveType = payload.type;
-            if (!effectiveType || typeof effectiveType !== 'string') {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: 'Payload JSON invalide (il manque le type).'
-                }));
-                return;
-            }
+        ws.playerToken = identity.token;
+        if (previous) {
+          clearTimeout(previous.disconnectTimeout);
+          previous.ws = ws;
+          previous.isOffline = false;
+          previous.disconnectTimeout = null;
+          send(ws, 'connectionConfirmed', 'Connexion rétablie', { pseudo: previous.pseudo, isPremium: previous.isPremium });
+          if (previous.currentRoom) gameManager.updateRoomPlayers(previous.currentRoom);
+          return;
+        }
 
-            switch (effectiveType) {
-                case 'connection': {
-                    const token = payload.token;
-                    console.log('[GAME-WS] Connexion demande reçue', { tokenPreview: token?.slice(0, 40) });
-
-                    // VALIDATION
-                    if (!token || typeof token !== 'string') {
-                        ws.send(JSON.stringify({
-                            type: 'error',
-                            message: 'Token invalide'
-                        }));
-                        return;
-                    }
-
-                    // Stocker le token sur la websocket pour le heartbeat
-                    ws.playerToken = token;
-
-                    const isJwt = token.includes('.');
-                    let verifiedUser = null;
-
-                    if (isJwt) {
-                        console.log('[GAME-WS] Vérification JWT demandée');
-                        verifiedUser = await verifyToken(token);
-
-                        if (!verifiedUser) {
-                            console.warn('[GAME-WS] Vérification centrale indisponible ou échouée, connexion continuée en mode invité');
-                        } else {
-                            console.log('[GAME-WS] Vérification centrale OK', { pseudo: verifiedUser.pseudo, id: verifiedUser.id });
-                        }
-                    }
-
-                    const pseudo = verifiedUser ? verifiedUser.pseudo : null;
-
-                    // Gérer la reconnexion sous période de grâce (15 secondes)
-                    if (players[token]) {
-                        console.log(`🔄 Reconnexion du joueur ${pseudo || players[token].pseudo} avec le token:`, token);
-                        
-                        if (players[token].disconnectTimeout) {
-                            clearTimeout(players[token].disconnectTimeout);
-                            players[token].disconnectTimeout = null;
-                        }
-                        
-                        players[token].ws = ws;
-                        players[token].isOffline = false;
-
-                        // Envoyer la confirmation au client
-                        ws.send(JSON.stringify({
-                            type: 'connectionConfirmed',
-                            token: token,
-                            message: 'Connexion rétablie'
-                        }));
-
-                        const roomCode = players[token].currentRoom;
-                        if (roomCode && rooms[roomCode]) {
-                            const room = rooms[roomCode];
-                            
-                            // Envoyer l'état actuel de la partie au joueur qui se reconnecte
-                            if (room.gameState.isStarted) {
-                                const allTimers = Object.entries(room.gameState.playerTimers).map(([t, timerData]) => ({
-                                    token: t,
-                                    pseudo: players[t]?.pseudo,
-                                    totalTimeLeft: timerData.totalTimeLeft,
-                                    isPaused: timerData.isPaused,
-                                    isEliminated: timerData.isEliminated,
-                                    malus: room.gameState.malus[t]?.totalMalus || 0,
-                                    score: room.gameState.scores[t] || 0,
-                                }));
-
-                                const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
-                                const isCurrentPlayer = token === currentPlayerToken;
-
-                                ws.send(JSON.stringify({
-                                    type: 'gameStarted',
-                                    roomCode: roomCode,
-                                    letter: room.gameState.currentLetter,
-                                    round: room.gameState.currentRound,
-                                    isCurrentPlayer: isCurrentPlayer,
-                                    currentPlayerPseudo: players[currentPlayerToken]?.pseudo,
-                                    playerOrder: room.gameState.playerOrder.map(t => ({
-                                        token: t,
-                                        pseudo: players[t]?.pseudo
-                                    })),
-                                    maxRounds: room.gameState.maxRounds,
-                                    timeLeft: room.gameState.playerTimers[token].totalTimeLeft,
-                                    isTimerPaused: room.gameState.playerTimers[token].isPaused,
-                                    timerStartTimestamp: room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp,
-                                    allTimers: allTimers,
-                                    message: 'Reconnexion à la partie en cours',
-                                }));
-                            } else {
-                                ws.send(JSON.stringify({
-                                    type: 'redirection',
-                                    roomCode: roomCode,
-                                    isMaster: players[token].isMaster,
-                                }));
-                            }
-                            gameManager.updateRoomPlayers(roomCode);
-                        }
-                        return;
-                    }
-
-                    players[token] = {
-                        ws,
-                        pseudo: pseudo,
-                        currentRoom: null,
-                        connectedAt: Date.now(),
-                        isOffline: false,
-                        disconnectTimeout: null,
-                        userId: verifiedUser ? verifiedUser.id : null,
-                        isPremium: verifiedUser ? verifiedUser.isPremium : false
-                    };
-
-                    console.log('✅ Nouveau joueur avec le token:', token);
-                    console.log('[GAME-WS] Joueur enregistré', { tokenPreview: token?.slice(0, 40), pseudo, userId: verifiedUser ? verifiedUser.id : null });
-
-                    ws.send(JSON.stringify({
-                        type: 'connectionConfirmed',
-                        token: token,
-                        message: 'Connexion établie avec succès',
-                        pseudo: pseudo,
-                        isPremium: verifiedUser ? verifiedUser.isPremium : false
-                    }));
-
-                    return;
-                }
-
-                case 'update': {
-                    const token = payload.token;
-                    const pseudo = payload.pseudo;
-                    const roomCode = payload.roomCode;
-
-                    if (players[token]) {
-                        players[token].pseudo = pseudo;
-                        gameManager.updateRoomPlayers(roomCode);
-                    }
-                    return;
-                }
-
-                case 'createRoom': {
-                    const { token, pseudo, maxRounds, maxTime, canEliminatedPlayersVote, randomizeOrder } = payload;
-
-                    if (!token || !pseudo) {
-                        ws.send(JSON.stringify({
-                            type: 'error',
-                            message: 'Token et pseudo requis'
-                        }));
-                        return;
-                    }
-
-                    if (!players[token]) {
-                        ws.send(JSON.stringify({
-                            type: 'error',
-                            message: 'Joueur non trouvé'
-                        }));
-                        return;
-                    }
-
-                    console.log('Création de room demandée par le joueur avec le token:', token);
-
-                    players[token].pseudo = pseudo;
-                    const roomCode = gameManager.createGame(token);
-                    
-                    const room = rooms[roomCode];
-                    if (room) {
-                        if (maxRounds !== undefined) room.gameState.maxRounds = maxRounds;
-                        if (maxTime !== undefined) room.gameState.timerConfig.duration = maxTime;
-                        if (canEliminatedPlayersVote !== undefined) room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
-                        if (randomizeOrder !== undefined) room.gameState.randomizeOrder = randomizeOrder;
-                        
-                        gameManager.updateRoomPlayers(roomCode);
-                    }
-                    return;
-                }
-
-                case 'updateRoomConfig': {
-                    const { roomCode, maxRounds, maxTime, canEliminatedPlayersVote, randomizeOrder } = payload;
-                    const room = rooms[roomCode];
-                    if (room) {
-                        if (maxRounds !== undefined) room.gameState.maxRounds = maxRounds;
-                        if (maxTime !== undefined) room.gameState.timerConfig.duration = maxTime;
-                        if (canEliminatedPlayersVote !== undefined) room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
-                        if (randomizeOrder !== undefined) room.gameState.randomizeOrder = randomizeOrder;
-                        
-                        gameManager.updateRoomPlayers(roomCode);
-                    }
-                    return;
-                }
-
-                case 'joinRoom': {
-                    const token = payload.token;
-                    const pseudo = payload.pseudo;
-                    const roomCode = payload.roomCode;
-                    if (players[token]) {
-                        players[token].pseudo = pseudo;
-                        console.log(players[token]);
-                    }
-                    try {
-                        players[token].ws.send(JSON.stringify({
-                            type: 'roomJoined',
-                            roomCode: roomCode,
-                            message: 'Bienvenue ' + pseudo
-                        }));
-                    } catch (e) {}
-                    gameManager.addPlayerToRoom(roomCode, token, false);
-                    return;
-                }
-
-                case 'leaveRoom': {
-                    const token = payload.token;
-                    const roomCode = payload.roomCode;
-
-                    if (!players[token]) {
-                        ws.send(JSON.stringify({
-                            type: 'error',
-                            message: 'Joueur non trouvé',
-                        }));
-                        return;
-                    }
-
-                    gameManager.removePlayerFromRoom(token);
-
-                    ws.send(JSON.stringify({
-                        type: 'leftRoom',
-                        roomCode: roomCode,
-                        message: 'Vous avez bien quitté la room',
-                    }));
-
-                    return;
-                }
-
-                case 'startGame': {
-                    const roomCode = payload.roomCode;
-                    const maxRounds = payload.maxRounds || 99;
-                    const timerDuration = payload.maxTime || 60000;
-                    const canEliminatedPlayersVote = payload.canEliminatedPlayersVote || false;
-                    const randomizeOrder = payload.randomizeOrder || false;
-                    if (roomCode && roomCode != null) {
-                        console.log('La partie :', roomCode, 'vient de commencer');
-                        gameManager.startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote, randomizeOrder);
-                    }
-                    return;
-                }
-
-                case 'replayGame': {
-                    const token = payload.token;
-                    const roomCode = payload.roomCode;
-                    if (rooms[roomCode] && players[token] && players[token].isMaster) {
-                        console.log(`🔄 Recommencer la partie demandé pour la room : ${roomCode}`);
-                        gameManager.resetGame(roomCode);
-                    }
-                    return;
-                }
-
-                case 'nextPlayer': {
-                    const roomCode = payload.roomCode;
-                    if (roomCode && roomCode != null) {
-                        console.log('Passage au joueur suivant dans la partie :', roomCode);
-                        gameManager.nextTurn(roomCode);
-                    }
-                    return;
-                }
-
-                case 'sendAnswer': {
-                    console.log('Validation de la réponse reçue :', payload);
-                    const roomCode = payload.roomCode;
-                    const timeRemaining = payload.timeRemaining;
-                    const token = payload.token;
-                    if (roomCode && roomCode != null) {
-                        console.log('Validation de la réponse dans la partie :', roomCode);
-                        gameManager.validateAnswer(roomCode, token, timeRemaining);
-                    }
-                    return;
-                }
-
-                case 'validateOrNot': {
-                    console.log('Réponse reçue :', payload);
-                    const roomCode = payload.roomCode;
-                    const token = payload.token;
-                    const answer = payload.isAnswerOK;
-
-                    if (roomCode && roomCode != null) {
-                        console.log('Réponse reçue pour la partie :', roomCode, 'avec la réponse :', answer);
-                        gameManager.validateOrNot(roomCode, token, answer);
-                    }
-                    return;
-                }
-
-                case 'timeout': {
-                    const roomCode = payload.roomCode;
-                    const token = payload.token;
-
-                    gameManager.eliminatePlayer(roomCode, token, 'timeout');
-                    return;
-                }
-
-                case 'getSuggestedConfig': {
-                    const playerCount = payload.playerCount || 4;
-                    const config = gameManager.getSuggestedConfig(playerCount);
-                    ws.send(JSON.stringify({
-                        type: 'suggestedConfig',
-                        maxRounds: config.maxRounds,
-                        maxTime: config.maxTime,
-                        canEliminatedPlayersVote: config.canEliminatedPlayersVote,
-                        randomizeOrder: config.randomizeOrder,
-                    }));
-                    return;
-                }
-
-                case 'submitFeedback': {
-                    const roomCode = payload.roomCode;
-                    const rating = payload.rating;
-                    const top = payload.top;
-                    const flop = payload.flop;
-
-                    gameManager.recordFeedback(roomCode, rating, top, flop);
-                    return;
-                }
-            }
-        });
-
-        // Gestion de la perte de connexion (Période de grâce de 15 secondes)
-        const handleCloseOrError = () => {
-            if (ws.playerToken && players[ws.playerToken]) {
-                const token = ws.playerToken;
-                const player = players[token];
-                
-                console.log(`🔌 Connexion perdue pour ${player.pseudo || token}. Période de grâce de 15s.`);
-                
-                player.isOffline = true;
-                player.ws = null;
-
-                if (player.currentRoom) {
-                    gameManager.updateRoomPlayers(player.currentRoom);
-                }
-
-                if (player.disconnectTimeout) clearTimeout(player.disconnectTimeout);
-                player.disconnectTimeout = setTimeout(() => {
-                    if (players[token] && players[token].isOffline) {
-                        console.log(`💀 Période de grâce expirée pour ${player.pseudo || token}. Suppression définitive.`);
-                        gameManager.removePlayerFromRoom(token);
-                        delete players[token];
-                    }
-                }, 15000);
-            }
+        players[identity.token] = {
+          ws, pseudo: identity.pseudo, currentRoom: null, connectedAt: Date.now(), isOffline: false,
+          disconnectTimeout: null, userId: identity.userId, isPremium: identity.isPremium, isMaster: false,
+          avatarData: payload.avatarData || { colorHex: '#FF5733', hatId: '', eyesId: '', mouthId: '' },
         };
+        return send(ws, 'connectionConfirmed', 'Connexion établie', { pseudo: identity.pseudo, isPremium: identity.isPremium });
+      }
 
-        // Gestionnaire d'erreur
-        ws.on('error', (error) => {
-            console.error('❌ Erreur WebSocket:', error.message);
-            handleCloseOrError();
-        });
+      const token = ws.playerToken;
+      if (!token || !players[token]) return send(ws, 'error', 'Authentification requise.');
+      const player = players[token];
 
-        // Gestionnaire de fermeture
-        ws.on('close', () => {
-            console.log('🔌 Connexion fermée');
-            handleCloseOrError();
-        });
-
+      switch (payload.type) {
+        case 'update': {
+          const pseudo = player.userId ? player.pseudo : safePseudo(payload.pseudo);
+          if (!pseudo) return send(ws, 'error', 'Pseudo invalide.');
+          player.pseudo = pseudo;
+          if (payload.avatarData) {
+            player.avatarData = payload.avatarData;
+          }
+          if (player.currentRoom) gameManager.updateRoomPlayers(player.currentRoom);
+          return;
+        }
+        case 'createRoom': {
+          const pseudo = player.userId ? player.pseudo : safePseudo(payload.pseudo);
+          if (!pseudo) return send(ws, 'error', 'Pseudo requis (2 à 24 caractères).');
+          if (player.currentRoom) return send(ws, 'error', 'Quittez votre salle actuelle avant d’en créer une autre.');
+          player.pseudo = pseudo;
+          if (payload.avatarData) {
+            player.avatarData = payload.avatarData;
+          }
+          const roomCode = gameManager.createGame(token);
+          const room = rooms[roomCode];
+          if (room) {
+            if (Number.isInteger(payload.maxTime) && payload.maxTime >= 15000 && payload.maxTime <= 300000) room.gameState.timerConfig.duration = payload.maxTime;
+            if (typeof payload.canEliminatedPlayersVote === 'boolean') room.gameState.canEliminatedPlayersVote = payload.canEliminatedPlayersVote;
+            if (typeof payload.randomizeOrder === 'boolean') room.gameState.randomizeOrder = payload.randomizeOrder;
+            if (typeof payload.useAiConfig === 'boolean') room.gameState.useAiConfig = payload.useAiConfig;
+            gameManager.updateRoomPlayers(roomCode);
+          }
+          return;
+        }
+        case 'joinRoom': {
+          const roomCode = String(payload.roomCode || '');
+          const pseudo = player.userId ? player.pseudo : safePseudo(payload.pseudo);
+          if (!pseudo || !rooms[roomCode] || rooms[roomCode].gameState.isStarted || player.currentRoom) return send(ws, 'error', 'Impossible de rejoindre cette salle.');
+          player.pseudo = pseudo;
+          if (payload.avatarData) {
+            player.avatarData = payload.avatarData;
+          }
+          if (!gameManager.addPlayerToRoom(roomCode, token, false)) return send(ws, 'error', 'Impossible de rejoindre cette salle.');
+          return send(ws, 'roomJoined', `Bienvenue ${pseudo}`, { roomCode });
+        }
+        case 'leaveRoom': {
+          if (!player.currentRoom) return send(ws, 'error', 'Vous n’êtes dans aucune salle.');
+          const roomCode = player.currentRoom;
+          gameManager.removePlayerFromRoom(token);
+          return send(ws, 'leftRoom', 'Vous avez quitté la salle.', { roomCode });
+        }
+        case 'updateRoomConfig': {
+          const roomCode = String(payload.roomCode || '');
+          if (!isMaster(token, roomCode) || rooms[roomCode].gameState.isStarted) return send(ws, 'error', 'Action réservée au maître de salle.');
+          const room = rooms[roomCode];
+          if (Number.isInteger(payload.maxTime) && payload.maxTime >= 15000 && payload.maxTime <= 300000) room.gameState.timerConfig.duration = payload.maxTime;
+          if (typeof payload.canEliminatedPlayersVote === 'boolean') room.gameState.canEliminatedPlayersVote = payload.canEliminatedPlayersVote;
+          if (typeof payload.randomizeOrder === 'boolean') room.gameState.randomizeOrder = payload.randomizeOrder;
+          if (typeof payload.useAiConfig === 'boolean') room.gameState.useAiConfig = payload.useAiConfig;
+          return gameManager.updateRoomPlayers(roomCode);
+        }
+        case 'setReady': {
+          const roomCode = String(payload.roomCode || '');
+          if (!isRoomMember(token, roomCode) || !gameManager.setPlayerReady(roomCode, token, payload.isReady)) return send(ws, 'error', 'Impossible de modifier l’état prêt.');
+          return;
+        }
+        case 'startGame': {
+          const roomCode = String(payload.roomCode || '');
+          if (!isMaster(token, roomCode)) return send(ws, 'error', 'Action réservée au maître de salle.');
+          const duration = Number.isInteger(payload.maxTime) && payload.maxTime >= 15000 && payload.maxTime <= 300000 ? payload.maxTime : rooms[roomCode].gameState.timerConfig.duration;
+          const room = rooms[roomCode];
+          return gameManager.startGame(roomCode, duration, room.gameState.canEliminatedPlayersVote, room.gameState.randomizeOrder, room.gameState.useAiConfig);
+        }
+        case 'replayGame': {
+          const roomCode = String(payload.roomCode || '');
+          if (!isMaster(token, roomCode)) return send(ws, 'error', 'Action réservée au maître de salle.');
+          return gameManager.resetGame(roomCode);
+        }
+        case 'sendAnswer': {
+          const roomCode = String(payload.roomCode || '');
+          const room = rooms[roomCode];
+          if (!isRoomMember(token, roomCode) || room.gameState.playerOrder[room.gameState.currentPlayerIndex] !== token) return send(ws, 'error', 'Ce n’est pas votre tour.');
+          return gameManager.validateAnswer(roomCode, token, payload.timeRemaining);
+        }
+        case 'validateOrNot': {
+          const roomCode = String(payload.roomCode || '');
+          if (!isRoomMember(token, roomCode) || typeof payload.isAnswerOK !== 'boolean') return send(ws, 'error', 'Vote invalide.');
+          return gameManager.validateOrNot(roomCode, token, payload.isAnswerOK);
+        }
+        case 'timeout': {
+          const roomCode = String(payload.roomCode || '');
+          const room = rooms[roomCode];
+          if (!isRoomMember(token, roomCode) || room.gameState.playerOrder[room.gameState.currentPlayerIndex] !== token) return send(ws, 'error', 'Expiration invalide.');
+          return gameManager.eliminatePlayer(roomCode, token, 'timeout');
+        }
+        case 'getSuggestedConfig': {
+          const config = gameManager.getSuggestedConfig(Number.isInteger(payload.playerCount) ? payload.playerCount : 4);
+          return send(ws, 'suggestedConfig', undefined, config);
+        }
+        case 'submitFeedback': {
+          const roomCode = String(payload.roomCode || '');
+          if (!isRoomMember(token, roomCode)) return send(ws, 'error', 'Salle invalide.');
+          return gameManager.recordFeedback(roomCode, payload.rating, payload.top, payload.flop);
+        }
+        default:
+          return send(ws, 'error', 'Type de message inconnu.');
+      }
     });
 
-    startHeartbeat();
+    const disconnect = () => {
+      const token = ws.playerToken;
+      const player = token && players[token];
+      if (!player || player.ws !== ws) return;
+      player.isOffline = true;
+      player.ws = null;
+      if (player.currentRoom) gameManager.updateRoomPlayers(player.currentRoom);
+      clearTimeout(player.disconnectTimeout);
+      player.disconnectTimeout = setTimeout(() => {
+        if (players[token]?.isOffline) {
+          gameManager.removePlayerFromRoom(token);
+          delete players[token];
+        }
+      }, 15000);
+    };
+    ws.on('error', disconnect);
+    ws.on('close', disconnect);
+  });
+  startHeartbeat();
 }

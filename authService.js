@@ -1,4 +1,4 @@
-const DEFAULT_AUTH_SERVICE_URL = 'https://games-auth-service.onrender.com';
+const DEFAULT_AUTH_SERVICE_URL = 'http://localhost:4000';
 
 export function getAuthServiceBaseUrl() {
     const configured = process.env.AUTH_SERVICE_URL?.trim();
@@ -36,6 +36,11 @@ export async function verifyToken(token) {
 }
 
 export async function updateStats(userId, win, malusSec) {
+    const gameServerSecret = process.env.GAME_SERVER_SECRET;
+    if (!gameServerSecret) {
+        console.error('GAME_SERVER_SECRET manquant : statistiques non envoyées.');
+        return;
+    }
     const authUrl = getAuthServiceBaseUrl();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -43,7 +48,7 @@ export async function updateStats(userId, win, malusSec) {
     try {
         await fetch(`${authUrl}/api/update-stats`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-kboom-game-secret': gameServerSecret },
             body: JSON.stringify({ userId, win, malusSec }),
             signal: controller.signal,
         });

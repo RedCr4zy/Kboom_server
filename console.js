@@ -52,11 +52,16 @@ export function initConsole() {
             return;
         }
 
+        if (cmd === 'reset_ai' || cmd === 'resetai' || cmd === 'reset_ai_weights') {
+            gameManager.resetAIWeights();
+            return;
+        }
+
         if (cmd === '') {
             console.log('⚠️ Commande vide');
             return;
         }
 
-        console.log('❌ Commande inconnue. Utilise: list | rooms | kick_0 | msg_0 <msg>');
+        console.log('❌ Commande inconnue. Utilise: list | rooms | reset_ai | kick_0 | msg_0 <msg>');
     });
 }

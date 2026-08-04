@@ -19,13 +19,12 @@ function generateRoom() {
         createdAt: Date.now(),
         gameState: {
             isStarted: false,
-            maxRounds: 10,
-            currentRound: 0,
             currentPlayerIndex: 0,
             currentLetter: null,
             canEliminatedPlayersVote: false,
             playerOrder: [],
-            scores: {},
+            eliminationOrder: [],
+            useAiConfig: false,
             currentVote: {
                 votes: {}
             },
@@ -81,7 +80,8 @@ function broadcastMalus(room, token, seconds, reason) {
 }
 
 function applyMalusToActivePlayer(room, currentPlayerToken) {
-    if (room.gameState.playerOrder.length <= 2) {
+    const activeCount = room.gameState.playerOrder.filter(t => !room.gameState.playerTimers[t]?.isEliminated).length;
+    if (activeCount <= 2) {
         console.log("Pas de malus à 2 joueurs");
         return;
     }
@@ -98,7 +98,8 @@ function applyMalusToActivePlayer(room, currentPlayerToken) {
 }
 
 function applyMalusToWrongNoVoters(room, currentPlayerToken) {
-    if (room.gameState.playerOrder.length <= 2) {
+    const activeCount = room.gameState.playerOrder.filter(t => !room.gameState.playerTimers[t]?.isEliminated).length;
+    if (activeCount <= 2) {
         return;
     }
 
@@ -122,7 +123,8 @@ function applyMalusToWrongNoVoters(room, currentPlayerToken) {
 }
 
 function applyMalusToWrongYesVoters(room, currentPlayerToken) {
-    if (room.gameState.playerOrder.length <= 2) {
+    const activeCount = room.gameState.playerOrder.filter(t => !room.gameState.playerTimers[t]?.isEliminated).length;
+    if (activeCount <= 2) {
         return;
     }
 
@@ -151,6 +153,7 @@ export function addPlayerToRoom(roomCode, playerToken, isMaster = false) {
 
     const player = players[playerToken];
     player.isMaster = isMaster;
+    player.isReady = isMaster;
     player.currentRoom = roomCode;
 
     if (isMaster) {
@@ -161,7 +164,6 @@ export function addPlayerToRoom(roomCode, playerToken, isMaster = false) {
     rooms[roomCode].players.push(player);
     
     rooms[roomCode].gameState.playerOrder.push(playerToken);
-    rooms[roomCode].gameState.scores[playerToken] = 0;
     rooms[roomCode].gameState.playerTimers[playerToken] = {
         totalTimeLeft: null,
         turnStartTimestamp: null,
@@ -192,10 +194,12 @@ export function updateRoomPlayers(roomCode) {
     if (!room) return;
 
     const playerList = room.players.map(p => ({
+        token: Object.keys(players).find(token => players[token] === p),
         pseudo: p.pseudo,
         isReady: p.isReady || false,
         isMaster: p.isMaster || false,
-        isOffline: p.isOffline || false
+        isOffline: p.isOffline || false,
+        avatarData: p.avatarData || { colorHex: '#FF5733', hatId: '', eyesId: '', mouthId: '' }
     }));
 
     room.players.forEach(player => {
@@ -205,10 +209,13 @@ export function updateRoomPlayers(roomCode) {
                     type: 'updatePlayers',
                     players: playerList,
                     roomCode: roomCode,
-                    maxRounds: room.gameState.maxRounds,
                     maxTime: room.gameState.timerConfig.duration,
                     canEliminatedPlayersVote: room.gameState.canEliminatedPlayersVote,
-                    randomizeOrder: room.gameState.randomizeOrder
+                    randomizeOrder: room.gameState.randomizeOrder,
+                    useAiConfig: room.gameState.useAiConfig,
+                    readyCount: room.players.filter(p => p.isReady).length,
+                    playerCount: room.players.length,
+                    canStart: room.players.length >= 2 && room.players.every(p => p.isReady)
                 }));
             } catch(e) {
                 console.error('Erreur updateRoomPlayers pour', player.pseudo, e.message);
@@ -232,7 +239,6 @@ function createAllTimersList(room) {
             isPaused: timerData ? timerData.isPaused : true,
             isEliminated: timerData ? timerData.isEliminated : false,
             malus: room.gameState.malus[token]?.totalMalus || 0,
-            score: room.gameState.scores[token] || 0,
         };
     });
 }
@@ -240,15 +246,19 @@ function createAllTimersList(room) {
 // =======================
 // GAME FLOW METHODS
 // =======================
-export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlayersVote, randomizeOrder = false) {
+export function startGame(roomCode, timerDuration, canEliminatedPlayersVote, randomizeOrder = false, useAiConfig = false) {
     const room = rooms[roomCode];
-    if (!room) return;
+    if (!room || room.players.length < 2 || !room.players.every(player => player.isReady)) return false;
+    if (useAiConfig) {
+        const config = getSuggestedConfig(room.players.length);
+        timerDuration = config.maxTime;
+        canEliminatedPlayersVote = config.canEliminatedPlayersVote;
+        randomizeOrder = config.randomizeOrder;
+    }
 
     room.gameState.isStarted = true;
-    room.gameState.currentRound = 1;
     room.gameState.currentPlayerIndex = 0;
     room.gameState.currentLetter = chooseRandomLetter();
-    room.gameState.maxRounds = maxRounds;
     room.gameState.timerConfig.duration = timerDuration;
     room.gameState.canEliminatedPlayersVote = canEliminatedPlayersVote;
     room.gameState.randomizeOrder = randomizeOrder;
@@ -280,6 +290,8 @@ export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlaye
         if (tempsInitial < 0 ) tempsInitial = 0;
 
         room.gameState.playerTimers[token].totalTimeLeft = tempsInitial;
+        room.gameState.playerTimers[token].isEliminated = false;
+        room.gameState.playerTimers[token].isPaused = true;
 
         if (malusJoueur > 0) {
             const pseudo = players[token]?.pseudo;
@@ -303,14 +315,13 @@ export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlaye
                     type: 'gameStarted',
                     roomCode: roomCode,
                     letter: room.gameState.currentLetter,
-                    round: room.gameState.currentRound,
                     isCurrentPlayer: isCurrentPlayer,
                     currentPlayerPseudo: players[currentPlayerToken]?.pseudo,
                     playerOrder: room.gameState.playerOrder.map(t => ({
                         token: t,
-                        pseudo: players[t]?.pseudo
+                        pseudo: players[t]?.pseudo,
+                        isEliminated: room.gameState.playerTimers[t]?.isEliminated || false
                     })),
-                    maxRounds: room.gameState.maxRounds,
                     timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
                     isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
                     timerStartTimestamp: room.gameState.playerTimers[currentPlayerToken].turnStartTimestamp,
@@ -322,6 +333,16 @@ export function startGame(roomCode, maxRounds, timerDuration, canEliminatedPlaye
             }
         }
     });
+    return true;
+}
+
+export function setPlayerReady(roomCode, playerToken, isReady) {
+    const room = rooms[roomCode];
+    const player = players[playerToken];
+    if (!room || !player || player.currentRoom !== roomCode || player.isMaster || room.gameState.isStarted) return false;
+    player.isReady = isReady === true;
+    updateRoomPlayers(roomCode);
+    return true;
 }
 
 export function validateAnswer(roomCode, playerToken, timeRemaining) {
@@ -348,7 +369,7 @@ export function validateAnswer(roomCode, playerToken, timeRemaining) {
 
     if (difference > marge) {
         tempsRestantFinal = tempsRestantServeur;
-        console.log(`⚠️ Difference suspecte : client=${timeRemaining}, serveur=${timeRemaining}`);
+        console.log(`⚠️ Difference suspecte : client=${timeRemaining}, serveur=${tempsRestantServeur}`);
     } else {
         tempsRestantFinal = (tempsRestantServeur + timeRemaining) / 2;
     }
@@ -390,8 +411,8 @@ export function validateOrNot(roomCode, playerToken, answer) {
     }
 
     if (room.gameState.canEliminatedPlayersVote === false) {
-        if (!room.gameState.playerOrder.includes(playerToken)) {
-            console.log('Joueur éliminé ou non dans la partie.');
+        if (room.gameState.playerTimers[playerToken]?.isEliminated) {
+            console.log('Joueur éliminé non autorisé à voter.');
             return;
         }
     }
@@ -417,6 +438,9 @@ export function validateOrNot(roomCode, playerToken, answer) {
 
     const results = vote_pour - vote_contre;
 
+    const activePlayers = room.gameState.playerOrder.filter(t => !room.gameState.playerTimers[t]?.isEliminated);
+    const eligibleVotersCount = room.gameState.canEliminatedPlayersVote ? room.gameState.playerOrder.length : activePlayers.length;
+
     room.gameState.playerWhoAlreadyVote.forEach(playerTokenItem => {
         const player = players[playerTokenItem];
         if (player && player.ws && player.ws.readyState === player.ws.OPEN) {
@@ -427,7 +451,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
                     votesPour: vote_pour,
                     votesContre: vote_contre,
                     totalVotes: Object.keys(room.gameState.currentVote.votes).length,
-                    totalPlayers: room.gameState.playerOrder.length,
+                    totalPlayers: eligibleVotersCount,
                     message: `Vote enregistré : ${results > 0 ? 'Pour' : results < 0 ? 'Contre' : 'Égalité'} (${vote_pour} pour, ${vote_contre} contre)`
                 }));
             } catch(e) {
@@ -436,14 +460,13 @@ export function validateOrNot(roomCode, playerToken, answer) {
         }
     });
 
-    const totalPlayers = room.gameState.playerOrder.length;
     const totalVotes = Object.keys(room.gameState.currentVote.votes).length;
 
-    if (totalVotes !== totalPlayers) {
+    if (totalVotes < eligibleVotersCount) {
         return;
     }
 
-    if (totalVotes === totalPlayers) {
+    if (totalVotes >= eligibleVotersCount) {
         console.log(`📊 Résultat du vote pour la room ${roomCode} : ${vote_pour} pour, ${vote_contre} contre (Total : ${results})`);
 
         room.players.forEach(player => {
@@ -455,7 +478,7 @@ export function validateOrNot(roomCode, playerToken, answer) {
                         votesPour: vote_pour,
                         votesContre: vote_contre,
                         totalVotes: totalVotes,
-                        totalPlayers: totalPlayers,
+                        totalPlayers: eligibleVotersCount,
                     }));
                 } catch (e) {
                     console.error('Erreur send voteResult pour', player.pseudo, e.message);
@@ -467,7 +490,6 @@ export function validateOrNot(roomCode, playerToken, answer) {
 
         if (results > 0) {
             console.log(`✅ La réponse est validée pour la room ${roomCode}`);
-            room.gameState.scores[currentPlayerToken] = (room.gameState.scores[currentPlayerToken] || 0) + 1;
             applyMalusToWrongNoVoters(room, currentPlayerToken);
             setTimeout(() => {
                 nextTurn(roomCode);
@@ -497,24 +519,24 @@ export function nextTurn(roomCode) {
         return;
     }
 
-    if (room.gameState.playerOrder.length === 0) {
+    const activePlayers = room.gameState.playerOrder.filter(t => !room.gameState.playerTimers[t]?.isEliminated);
+    if (activePlayers.length === 0) {
         console.log(`🏁 Partie terminée dans la room ${roomCode} (Tous les joueurs éliminés)`);
         finishGame(roomCode);
         return;
     }
 
-    room.gameState.currentPlayerIndex++;
-    
-    if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
-        room.gameState.currentPlayerIndex = 0;
-        room.gameState.currentRound++;
-    }
-
-    if (room.gameState.currentRound > room.gameState.maxRounds) {
-        console.log(`🏁 Partie terminée dans la room ${roomCode}`);
-        finishGame(roomCode);
-        return;
-    }
+    let attempts = 0;
+    do {
+        room.gameState.currentPlayerIndex++;
+        if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
+            room.gameState.currentPlayerIndex = 0;
+        }
+        attempts++;
+    } while (
+        room.gameState.playerTimers[room.gameState.playerOrder[room.gameState.currentPlayerIndex]]?.isEliminated &&
+        attempts <= room.gameState.playerOrder.length + 1
+    );
 
     const currentPlayerToken = room.gameState.playerOrder[room.gameState.currentPlayerIndex];
     const currentPlayer = players[currentPlayerToken];
@@ -536,18 +558,18 @@ export function nextTurn(roomCode) {
                     type: 'nextTurn',
                     roomCode: roomCode,
                     letter: room.gameState.currentLetter,
-                    round: room.gameState.currentRound,
                     isCurrentPlayer: isCurrentPlayer,
                     currentPlayerPseudo: currentPlayer?.pseudo,
                     currentPlayerToken: currentPlayerToken,
                     playerOrder: room.gameState.playerOrder.map(t => ({
                         token: t,
                         pseudo: players[t]?.pseudo,
-                        isCurrent: t === currentPlayerToken
+                        isCurrent: t === currentPlayerToken,
+                        isEliminated: room.gameState.playerTimers[t]?.isEliminated || false
                     })),
-                    timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
-                    isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
-                    timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
+                    timeLeft: room.gameState.playerTimers[playerToken]?.totalTimeLeft || 0,
+                    isTimerPaused: room.gameState.playerTimers[playerToken]?.isPaused ?? true,
+                    timerStartTimestamp: room.gameState.playerTimers[currentPlayerToken]?.turnStartTimestamp,
                     allTimers: allTimers,
                     message: isCurrentPlayer ? "C'est votre tour !" : `C'est au tour de ${currentPlayer?.pseudo}`,
                 }));
@@ -588,11 +610,12 @@ export function replayTurn(roomCode) {
                     playerOrder: room.gameState.playerOrder.map(t => ({
                         token: t,
                         pseudo: players[t]?.pseudo,
-                        isCurrent: t === currentPlayerToken
+                        isCurrent: t === currentPlayerToken,
+                        isEliminated: room.gameState.playerTimers[t]?.isEliminated || false
                     })),
-                    timeLeft: room.gameState.playerTimers[playerToken].totalTimeLeft,
-                    isTimerPaused: room.gameState.playerTimers[playerToken].isPaused,
-                    timerStartTimestamp: room.gameState.playerTimers[playerToken].turnStartTimestamp,
+                    timeLeft: room.gameState.playerTimers[playerToken]?.totalTimeLeft || 0,
+                    isTimerPaused: room.gameState.playerTimers[playerToken]?.isPaused ?? true,
+                    timerStartTimestamp: room.gameState.playerTimers[currentPlayerToken]?.turnStartTimestamp,
                     allTimers: allTimers,
                     message: isCurrentPlayer ? "C'est encore votre tour !" : `Le tour de ${currentPlayer?.pseudo} à refaire`,
                 }));
@@ -615,30 +638,22 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
     const eliminatedPlayerToken = playerToken;
     const wasCurrentPlayer = playerToken === room.gameState.playerOrder[room.gameState.currentPlayerIndex];
 
-    room.gameState.playerTimers[eliminatedPlayerToken].isEliminated = true;
-    room.gameState.playerTimers[eliminatedPlayerToken].totalTimeLeft = 0;
-    room.gameState.playerTimers[eliminatedPlayerToken].isPaused = true;
+    if (room.gameState.playerTimers[eliminatedPlayerToken]) {
+        room.gameState.playerTimers[eliminatedPlayerToken].isEliminated = true;
+        room.gameState.playerTimers[eliminatedPlayerToken].totalTimeLeft = 0;
+        room.gameState.playerTimers[eliminatedPlayerToken].isPaused = true;
+        room.gameState.playerTimers[eliminatedPlayerToken].turnStartTimestamp = null;
+    }
+    if (!room.gameState.eliminationOrder.includes(eliminatedPlayerToken)) room.gameState.eliminationOrder.push(eliminatedPlayerToken);
 
-    if (room.gameState.playerOrder.length === 0) {
+    const activePlayers = room.gameState.playerOrder.filter(t => !room.gameState.playerTimers[t]?.isEliminated);
+
+    console.log(`👤 ${eliminatedPlayerPseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
+
+    if (activePlayers.length === 0) {
         console.log(`🏁 Partie terminée dans la room ${roomCode} (Tous les joueurs éliminés)`);
         finishGame(roomCode);
         return;
-    }
-    
-    console.log(`👤 ${eliminatedPlayerPseudo} a été éliminé de la room ${roomCode} (Raison : ${reason})`);
-    const removedIndex = room.gameState.playerOrder.indexOf(eliminatedPlayerToken);    
-    room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== eliminatedPlayerToken);
-
-    if (removedIndex <= room.gameState.currentPlayerIndex) {
-        room.gameState.currentPlayerIndex--; 
-    }
-
-    if (room.gameState.currentPlayerIndex < 0) {
-        room.gameState.currentPlayerIndex = 0;
-    }
-
-    if (room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
-        room.gameState.currentPlayerIndex = 0;
     }
 
     const allTimers = createAllTimersList(room);
@@ -654,6 +669,7 @@ export function eliminatePlayer(roomCode, playerToken, reason) {
                         token: t,
                         pseudo: players[t]?.pseudo || 'Inconnu',
                         isCurrent: t === room.gameState.playerOrder[room.gameState.currentPlayerIndex],
+                        isEliminated: room.gameState.playerTimers[t]?.isEliminated || false,
                     })),
                     allTimers: allTimers,
                     eliminatedPlayerToken: eliminatedPlayerToken,
@@ -684,29 +700,20 @@ export function finishGame(roomCode) {
 
     room.gameState.endedPlayerCount = room.players.length;
 
+    const survivorTokens = room.gameState.playerOrder.filter(token => !room.gameState.eliminationOrder.includes(token));
+    const rankingTokens = [...survivorTokens, ...room.gameState.eliminationOrder.slice().reverse()];
     const statsByPlayer = {};
-    room.gameState.playerOrder.forEach(token => {
+    rankingTokens.forEach((token, index) => {
         const player = players[token];
         if (player) {
             statsByPlayer[player.pseudo] = {
-                score: room.gameState.scores[token] || 0,
+                rank: index + 1,
                 totalMalus: room.gameState.malus[token]?.totalMalus || 0,
                 refusedWords: room.gameState.malus[token]?.refusedWords || 0,
                 wrongNoVotes: room.gameState.malus[token]?.wrongNoVotes || 0,
                 wrongYesVotes: room.gameState.malus[token]?.wrongYesVotes || 0,
+                isEliminated: room.gameState.playerTimers[token]?.isEliminated || false,
             };
-        }
-    });
-
-    // Calculer le ou les gagnants de la partie
-    let highestScore = -1;
-    let winners = [];
-    Object.entries(room.gameState.scores).forEach(([token, score]) => {
-        if (score > highestScore) {
-            highestScore = score;
-            winners = [token];
-        } else if (score === highestScore) {
-            winners.push(token);
         }
     });
 
@@ -714,7 +721,7 @@ export function finishGame(roomCode) {
     room.gameState.playerOrder.forEach(token => {
         const player = players[token];
         if (player && player.userId) {
-            const isWinner = winners.includes(token);
+            const isWinner = rankingTokens[0] === token;
             const malusSec = Math.floor((room.gameState.malus[token]?.totalMalus || 0) / 1000);
             updateStats(player.userId, isWinner, malusSec).catch(() => {});
         }
@@ -729,8 +736,7 @@ export function finishGame(roomCode) {
                     type: 'finishGame',
                     roomCode: roomCode,
                     stats: statsByPlayer,
-                    scores: room.gameState.scores,
-                    yourScore: room.gameState.scores[playerToken],
+                    ranking: rankingTokens.map((token, index) => ({ token, pseudo: players[token]?.pseudo || 'Inconnu', rank: index + 1 })),
                 }));
             } catch(e) {
                 console.error('Erreur finishGame pour', player.pseudo, e.message);
@@ -744,7 +750,6 @@ export function resetGame(roomCode) {
     if (!room) return;
 
     room.gameState.isStarted = false;
-    room.gameState.currentRound = 0;
     room.gameState.currentPlayerIndex = 0;
     room.gameState.currentLetter = null;
     room.gameState.playerWhoAlreadyVote = [];
@@ -757,7 +762,8 @@ export function resetGame(roomCode) {
     room.gameState.playerOrder = allTokens;
 
     room.gameState.playerOrder.forEach(token => {
-        room.gameState.scores[token] = 0;
+        room.gameState.eliminationOrder = [];
+        players[token].isReady = players[token].isMaster;
         room.gameState.playerTimers[token] = {
             totalTimeLeft: room.gameState.timerConfig.duration,
             turnStartTimestamp: null,
@@ -797,6 +803,8 @@ export function removePlayerFromRoom(playerToken) {
     if (!room) return;
 
     room.gameState.playerOrder = room.gameState.playerOrder.filter(t => t !== playerToken);
+    delete room.gameState.playerTimers[playerToken];
+    delete room.gameState.malus[playerToken];
 
     if (room.gameState.isStarted && room.gameState.currentPlayerIndex >= room.gameState.playerOrder.length) {
         room.gameState.currentPlayerIndex = 0;
@@ -865,7 +873,6 @@ export function getGameState(roomCode) {
         playerOrder: room.gameState.playerOrder.map(t => ({
             token: t,
             pseudo: players[t]?.pseudo,
-            score: room.gameState.scores[t] || 0
         })),
     };
 }
@@ -877,13 +884,13 @@ export function getGameState(roomCode) {
 const weightsPath = path.join(process.cwd(), 'ai_weights.json');
 
 const defaultWeights = {
-    "2": { maxRounds: 5, maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true },
-    "3": { maxRounds: 5, maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true },
-    "4": { maxRounds: 6, maxTime: 60000, canEliminatedPlayersVote: false, randomizeOrder: true },
-    "5": { maxRounds: 6, maxTime: 60000, canEliminatedPlayersVote: true, randomizeOrder: true },
-    "6": { maxRounds: 7, maxTime: 75000, canEliminatedPlayersVote: true, randomizeOrder: true },
-    "7": { maxRounds: 7, maxTime: 75000, canEliminatedPlayersVote: true, randomizeOrder: true },
-    "8": { maxRounds: 8, maxTime: 90000, canEliminatedPlayersVote: true, randomizeOrder: true }
+    "2": { maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true },
+    "3": { maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true },
+    "4": { maxTime: 60000, canEliminatedPlayersVote: false, randomizeOrder: true },
+    "5": { maxTime: 60000, canEliminatedPlayersVote: true, randomizeOrder: true },
+    "6": { maxTime: 75000, canEliminatedPlayersVote: true, randomizeOrder: true },
+    "7": { maxTime: 75000, canEliminatedPlayersVote: true, randomizeOrder: true },
+    "8": { maxTime: 90000, canEliminatedPlayersVote: true, randomizeOrder: true }
 };
 
 let aiWeights = { ...defaultWeights };
@@ -909,6 +916,12 @@ function saveWeights() {
     }
 }
 
+export function resetAIWeights() {
+    aiWeights = JSON.parse(JSON.stringify(defaultWeights));
+    saveWeights();
+    console.log("🤖 IA des paramètres réinitialisée aux valeurs par défaut !");
+}
+
 export function getSuggestedConfig(playerCount) {
     const key = playerCount.toString();
     if (aiWeights[key]) {
@@ -916,9 +929,9 @@ export function getSuggestedConfig(playerCount) {
     }
     
     if (playerCount <= 1) {
-        return { maxRounds: 5, maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true };
+        return { maxTime: 45000, canEliminatedPlayersVote: false, randomizeOrder: true };
     }
-    return { maxRounds: 8, maxTime: 90000, canEliminatedPlayersVote: true, randomizeOrder: true };
+    return { maxTime: 90000, canEliminatedPlayersVote: true, randomizeOrder: true };
 }
 
 export function recordFeedback(roomCode, rating, top, flop) {
@@ -932,7 +945,7 @@ export function recordFeedback(roomCode, rating, top, flop) {
 export function updateAIWeights(playerCount, rating, top, flop) {
     const key = playerCount.toString();
     if (!aiWeights[key]) {
-        aiWeights[key] = { maxRounds: 6, maxTime: 60000, canEliminatedPlayersVote: false, randomizeOrder: true };
+        aiWeights[key] = { maxTime: 60000, canEliminatedPlayersVote: false, randomizeOrder: true };
     }
 
     const config = aiWeights[key];
@@ -940,10 +953,8 @@ export function updateAIWeights(playerCount, rating, top, flop) {
     // Q-Learning / Feedback adaptation logic
     if (rating < 4 || flop) {
         if (flop === "Partie trop longue") {
-            if (config.maxRounds > 3) config.maxRounds -= 1;
             if (config.maxTime > 15000) config.maxTime -= 5000;
         } else if (flop === "Partie trop courte") {
-            if (config.maxRounds < 15) config.maxRounds += 1;
             if (config.maxTime < 120000) config.maxTime += 5000;
         } else if (flop === "Pas assez de temps pour répondre") {
             if (config.maxTime < 120000) config.maxTime += 10000;
